@@ -63,8 +63,8 @@ function SwingController.new(ctx, fsm, input, camera, visuals)
 	self.lean = self.cleaner:Add(lean)
 
 	fsm:Register("Swing", {
-		Enter = function(_previous, anchor: Vector3)
-			self:_enter(anchor)
+		Enter = function(_previous, pivot: Vector3, webPoint: Vector3)
+			self:_enter(pivot, webPoint)
 		end,
 		Exit = function(nextState: string)
 			self:_exit(nextState)
@@ -83,35 +83,44 @@ function SwingController.new(ctx, fsm, input, camera, visuals)
 		if os.clock() < self.cooldownUntil or not ctx:IsAlive() then
 			return
 		end
-		local anchor = self:_findAnchor()
-		if anchor then
-			fsm:Set("Swing", anchor)
+		local pivot, webPoint = self:_findAnchor()
+		if pivot then
+			fsm:Set("Swing", pivot, webPoint)
 		end
 	end)
 
 	return self
 end
 
--- Which way the player wants to go: mostly where the camera looks, nudged toward current motion.
+-- Which way the player wants to go: the direction they're pressing (WASD / stick), or where the
+-- camera looks if they aren't pressing anything. Nudged slightly toward current motion.
 function SwingController:_heading(): Vector3
 	local root = self.ctx.Root
-	local cam = workspace.CurrentCamera
-	local look = flat(cam.CFrame.LookVector)
-	local heading = safeUnit(look, safeUnit(flat(root.CFrame.LookVector), Vector3.zAxis))
+	local move = flat(self.ctx.Humanoid.MoveDirection)
+	local heading
+	if move.Magnitude > 0.1 then
+		heading = move.Unit
+	else
+		local look = flat(workspace.CurrentCamera.CFrame.LookVector)
+		heading = safeUnit(look, safeUnit(flat(root.CFrame.LookVector), Vector3.zAxis))
+	end
 	local velocity = flat(root.AssemblyLinearVelocity)
 	if velocity.Magnitude > 25 then
-		heading = safeUnit(heading * 0.6 + velocity.Unit * 0.4, heading)
+		heading = safeUnit(heading * 0.75 + velocity.Unit * 0.25, heading)
 	end
 	return heading
 end
 
-function SwingController:_findAnchor(): Vector3?
+-- Returns the swing pivot (used for physics) and the point where the web visibly sticks.
+-- For webs on walls the pivot sits out over the street, so you swing past the building, not into it.
+function SwingController:_findAnchor(): (Vector3?, Vector3?)
 	local pos = self.ctx.Root.Position
 	local heading = self:_heading()
 	local basis = CFrame.lookAt(Vector3.zero, heading)
 	local ideal = pos + heading * S.IdealForward + Vector3.yAxis * S.IdealUp
 
 	local best: Vector3? = nil
+	local bestWebPoint: Vector3? = nil
 	local bestScore = -math.huge
 
 	for _, yaw in S.SearchYaw do
@@ -120,23 +129,59 @@ function SwingController:_findAnchor(): Vector3?
 			local result = workspace:Raycast(pos, dir * S.MaxWebLength, self.ctx.SwingParams)
 			if result then
 				-- Stick slightly out from the surface so the web doesn't clip into the wall.
-				local point = result.Position + result.Normal * 0.2
-				local rel = point - pos
+				local webPoint = result.Position + result.Normal * 0.2
+				local pivot = webPoint
+				if math.abs(result.Normal.Y) < 0.5 then
+					pivot += safeUnit(flat(result.Normal), Vector3.zero) * S.AnchorWallOffset
+				end
+				local rel = pivot - pos
 				if
 					rel.Magnitude >= S.MinWebLength
 					and rel.Y >= S.MinAnchorHeight
 					and flat(rel):Dot(heading) > 0
 				then
-					local score = -(point - ideal).Magnitude
+					local score = -(pivot - ideal).Magnitude
 					if score > bestScore then
-						best, bestScore = point, score
+						best, bestWebPoint, bestScore = pivot, webPoint, score
 					end
 				end
 			end
 		end
 	end
 
-	return best
+	return best, bestWebPoint
+end
+
+-- Pushes you away from nearby walls and removes the part of your velocity heading into them,
+-- so a near-crash becomes a slide along the wall.
+function SwingController:_avoidWalls(pos: Vector3, v: Vector3, dt: number): Vector3
+	local horizontal = flat(v)
+	local speed = horizontal.Magnitude
+	if speed < 1 then
+		return v
+	end
+	local forward = horizontal / speed
+	local right = forward:Cross(Vector3.yAxis)
+
+	local checks = {
+		{ forward, math.clamp(speed * S.WallLookAhead, S.WallMinCheck, S.WallMaxCheck) },
+		{ right, S.WallSideCheck },
+		{ -right, S.WallSideCheck },
+	}
+	for _, check in checks do
+		local dir, range = check[1], check[2]
+		local hit = workspace:Raycast(pos, dir * range, self.ctx.WorldParams)
+		if hit and math.abs(hit.Normal.Y) < 0.5 then
+			local normal = safeUnit(flat(hit.Normal), Vector3.zero)
+			local closeness = 1 - hit.Distance / range -- 0 far, 1 touching
+			local into = v:Dot(normal)
+			if into < 0 then
+				v -= normal * into * closeness
+			end
+			v += normal * S.WallPush * closeness * dt
+		end
+	end
+	return v
 end
 
 -- Height of whatever is under the player (or very low if nothing is).
@@ -145,7 +190,7 @@ function SwingController:_floorHeight(pos: Vector3): number
 	return if result then result.Position.Y else pos.Y - 1000
 end
 
-function SwingController:_enter(anchor: Vector3)
+function SwingController:_enter(anchor: Vector3, webPoint: Vector3?)
 	local ctx = self.ctx
 	local root = ctx.Root
 	local humanoid = ctx.Humanoid
@@ -182,7 +227,7 @@ function SwingController:_enter(anchor: Vector3)
 	self.lean.CFrame = root.CFrame.Rotation
 	self.lean.Enabled = true
 
-	self.visuals:Attach(anchor)
+	self.visuals:Attach(webPoint or anchor)
 	self.camera:Kick(Config.Camera.AttachKick)
 end
 
@@ -220,9 +265,22 @@ function SwingController:_update(dt: number)
 	end
 	local ropeDir = toAnchor / distance -- points from you to the anchor
 
-	-- Steering: movement keys push you sideways across the arc.
-	local move = ctx.Humanoid.MoveDirection
-	if move.Magnitude > 0.05 then
+	-- Steering: movement keys turn your direction of travel (keeping your speed),
+	-- and holding the opposite direction brakes.
+	local move = flat(ctx.Humanoid.MoveDirection)
+	if move.Magnitude > 0.1 then
+		move = move.Unit
+		local horizontal = flat(v)
+		local hSpeed = horizontal.Magnitude
+		if hSpeed > 1 then
+			local dir = horizontal / hSpeed
+			if dir:Dot(move) < -0.3 then
+				hSpeed = math.max(0, hSpeed - S.Brake * dt)
+			else
+				dir = safeUnit(dir:Lerp(move, MathUtil.expAlpha(S.TurnRate, dt)), dir)
+			end
+			v = dir * hSpeed + Vector3.new(0, v.Y, 0)
+		end
 		v += projectOnPlane(move, ropeDir) * S.SteerAccel * dt
 	end
 
@@ -243,6 +301,8 @@ function SwingController:_update(dt: number)
 		local stretch = distance - self.ropeLength
 		correction = ropeDir * math.min(stretch * S.RopeStiffness, S.MaxCorrectionSpeed)
 	end
+
+	v = self:_avoidWalls(pos, v, dt)
 
 	-- Soft speed cap
 	local speed = v.Magnitude
