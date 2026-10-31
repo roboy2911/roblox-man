@@ -7,7 +7,10 @@
 --      arc, then the web stops you moving further away than its length. The result is fed to a
 --      LinearVelocity on the root part, so we control the feel exactly.
 --   3. Letting go keeps all your speed and adds a boost. Letting go while rising past the bottom
---      of the arc is a "perfect release" with a bigger boost and camera kick.
+--      of the arc is a "perfect release" with a bigger boost, a flip and camera kick.
+--
+-- Webs alternate between a building on your left and one on your right (or favor the side you're
+-- turning toward), and come from the matching hand.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -23,13 +26,15 @@ local projectOnPlane = MathUtil.projectOnPlane
 local SwingController = {}
 SwingController.__index = SwingController
 
-function SwingController.new(ctx, fsm, input, camera, visuals)
+function SwingController.new(ctx, fsm, input, camera, visuals, effects, motion)
 	local self = setmetatable({
 		ctx = ctx,
 		fsm = fsm,
 		input = input,
 		camera = camera,
 		visuals = visuals,
+		effects = effects,
+		motion = motion, -- shared info for poses (which hand, where the web is, ...)
 		cleaner = Cleaner.new(),
 
 		-- The web as a chain of points: [1] is where the swing started, later entries are
@@ -46,6 +51,8 @@ function SwingController.new(ctx, fsm, input, camera, visuals)
 		releaseVelocity = nil :: Vector3?,
 		perfectRelease = false,
 		cooldownUntil = 0,
+		nextSide = 1, -- 1 = prefer a building on the right next, -1 = left
+		wasAtBottom = false,
 	}, SwingController)
 
 	local driver = Instance.new("LinearVelocity")
@@ -69,8 +76,8 @@ function SwingController.new(ctx, fsm, input, camera, visuals)
 	self.lean = self.cleaner:Add(lean)
 
 	fsm:Register("Swing", {
-		Enter = function(_previous, pivot: Vector3, webPoint: Vector3)
-			self:_enter(pivot, webPoint)
+		Enter = function(_previous, pivot: Vector3, webPoint: Vector3, hand: string)
+			self:_enter(pivot, webPoint, hand)
 		end,
 		Exit = function(nextState: string)
 			self:_exit(nextState)
@@ -83,15 +90,15 @@ function SwingController.new(ctx, fsm, input, camera, visuals)
 	-- Holding the button while not swinging keeps looking for an anchor, so you can hold it
 	-- while falling and the web fires the moment a building comes in range.
 	fsm:AddHook(function()
-		if fsm:Is("Swing") or not input:IsDown("Swing") then
+		if not (fsm:Is("Ground") or fsm:Is("Air")) or not input:IsDown("Swing") then
 			return
 		end
 		if os.clock() < self.cooldownUntil or not ctx:IsAlive() then
 			return
 		end
-		local pivot, webPoint = self:_findAnchor()
+		local pivot, webPoint, hand = self:_findAnchor()
 		if pivot then
-			fsm:Set("Swing", pivot, webPoint)
+			fsm:Set("Swing", pivot, webPoint, hand)
 		end
 	end)
 
@@ -117,13 +124,30 @@ function SwingController:_heading(): Vector3
 	return heading
 end
 
--- Returns the swing pivot (used for physics) and the point where the web visibly sticks.
--- For webs on walls the pivot sits out over the street, so you swing past the building, not into it.
-function SwingController:_findAnchor(): (Vector3?, Vector3?)
+-- Which side the next web should favor: toward your turn if you're turning, otherwise the
+-- opposite side from the last web (left, right, left, ...).
+function SwingController:_preferredSide(heading: Vector3): number
+	local velocity = flat(self.ctx.Root.AssemblyLinearVelocity)
+	if velocity.Magnitude > 10 then
+		local velocityRight = velocity.Unit:Cross(Vector3.yAxis)
+		local turn = heading:Dot(velocityRight) -- > 0 means you want to go right of where you're moving
+		if math.abs(turn) > S.TurnSideThreshold then
+			return if turn > 0 then 1 else -1
+		end
+	end
+	return self.nextSide
+end
+
+-- Returns the swing pivot (used for physics), the point where the web visibly sticks, and which
+-- hand shoots it. For webs on walls the pivot sits out over the street, so you swing past the
+-- building, not into it.
+function SwingController:_findAnchor(): (Vector3?, Vector3?, string?)
 	local pos = self.ctx.Root.Position
 	local heading = self:_heading()
+	local right = heading:Cross(Vector3.yAxis)
+	local side = self:_preferredSide(heading)
 	local basis = CFrame.lookAt(Vector3.zero, heading)
-	local ideal = pos + heading * S.IdealForward + Vector3.yAxis * S.IdealUp
+	local ideal = pos + heading * S.IdealForward + Vector3.yAxis * S.IdealUp + right * side * S.IdealSide
 
 	local best: Vector3? = nil
 	local bestWebPoint: Vector3? = nil
@@ -147,6 +171,7 @@ function SwingController:_findAnchor(): (Vector3?, Vector3?)
 					and flat(rel):Dot(heading) > 0
 				then
 					local score = -(pivot - ideal).Magnitude
+						- math.abs(rel.Magnitude - S.IdealLength) * S.LengthPenalty
 					if score > bestScore then
 						best, bestWebPoint, bestScore = pivot, webPoint, score
 					end
@@ -155,7 +180,11 @@ function SwingController:_findAnchor(): (Vector3?, Vector3?)
 		end
 	end
 
-	return best, bestWebPoint
+	if not best or not bestWebPoint then
+		return nil, nil, nil
+	end
+	local hand = if flat(bestWebPoint - pos):Dot(right) >= 0 then "Right" else "Left"
+	return best, bestWebPoint, hand
 end
 
 -- Pushes you away from nearby walls and removes the part of your velocity heading into them,
@@ -274,6 +303,7 @@ function SwingController:_updateWraps(pos: Vector3): Vector3
 			table.insert(visualPoints, points[i])
 		end
 		self.visuals:SetPoints(visualPoints)
+		self.motion.pivot = visualPoints[#visualPoints] -- the arm aims at the nearest bend
 	end
 
 	self.lastPos = pos
@@ -286,7 +316,7 @@ function SwingController:_floorHeight(pos: Vector3): number
 	return if result then result.Position.Y else pos.Y - 1000
 end
 
-function SwingController:_enter(anchor: Vector3, webPoint: Vector3?)
+function SwingController:_enter(anchor: Vector3, webPoint: Vector3?, hand: string?)
 	local ctx = self.ctx
 	local root = ctx.Root
 	local humanoid = ctx.Humanoid
@@ -326,7 +356,15 @@ function SwingController:_enter(anchor: Vector3, webPoint: Vector3?)
 	self.lean.CFrame = root.CFrame.Rotation
 	self.lean.Enabled = true
 
-	self.visuals:Attach(webPoint or anchor)
+	local webHand = hand or "Right"
+	self.nextSide = if webHand == "Right" then -1 else 1
+	self.wasAtBottom = false
+	self.motion.webHand = webHand
+	self.motion.pivot = self.webPoint
+	self.motion.lowness = 0
+
+	self.visuals:Attach(self.webPoint, ctx.HandAttachments[webHand])
+	self.effects:Shoot()
 	self.camera:Kick(Config.Camera.AttachKick)
 end
 
@@ -389,6 +427,19 @@ function SwingController:_update(dt: number)
 	local lowness = math.clamp(ropeDir.Y, 0, 1) -- 1 when hanging straight down
 	if tangent.Magnitude > 1 and flat(tangent):Dot(self:_heading()) > 0 then
 		v += tangent.Unit * S.PumpAccel * lowness * lowness * dt
+	end
+	self.motion.lowness = lowness
+
+	-- Whoosh + a little shake each time you sweep through the bottom of the arc fast.
+	if lowness > 0.92 then
+		local speedNow = v.Magnitude
+		if not self.wasAtBottom and speedNow > Config.Effects.BottomWhooshMinSpeed then
+			self.effects:Whoosh(speedNow)
+			self.camera:Shake(Config.Effects.BottomShake)
+		end
+		self.wasAtBottom = true
+	elseif lowness < 0.8 then
+		self.wasAtBottom = false
 	end
 
 	-- The web: you can't move further away than its length.
@@ -453,6 +504,11 @@ function SwingController:_release()
 
 	self.releaseVelocity = MathUtil.clampMagnitude(v, S.MaxReleaseSpeed)
 	self.perfectRelease = perfect
+	self.effects:Release(perfect)
+	if perfect then
+		self.motion.flipStart = os.clock()
+		self.camera:Shake(Config.Effects.PerfectShake)
+	end
 	self.fsm:Set("Air")
 end
 
@@ -463,6 +519,8 @@ function SwingController:_exit(_nextState: string)
 	self.driver.Enabled = false
 	self.lean.Enabled = false
 	self.visuals:Detach()
+	self.motion.pivot = nil
+	self.motion.lowness = 0
 
 	local finalVelocity = self.releaseVelocity or self.velocity
 	ctx.Root.AssemblyLinearVelocity = finalVelocity

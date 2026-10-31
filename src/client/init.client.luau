@@ -9,10 +9,13 @@ local Cleaner = require(Shared:WaitForChild("Cleaner"))
 
 local CameraController = require(script.CameraController)
 local CharacterContext = require(script.CharacterContext)
+local Effects = require(script.Effects)
 local InputController = require(script.InputController)
 local LocomotionController = require(script.LocomotionController)
 local MovementState = require(script.MovementState)
+local PoseController = require(script.PoseController)
 local SwingController = require(script.SwingController)
+local TrickController = require(script.TrickController)
 local WebVisuals = require(script.WebVisuals)
 
 local player = Players.LocalPlayer
@@ -45,14 +48,29 @@ local function startCharacter(character: Model)
 	session = s
 	s:Add(ctx)
 
+	-- Shared info the movement systems write and the pose system reads.
+	local motion = {
+		webHand = "Right",
+		pivot = nil :: Vector3?,
+		lowness = 0,
+		diving = false,
+		flipStart = nil :: number?,
+	}
+
 	local fsm = s:Add(MovementState.new())
 	local visuals = s:Add(WebVisuals.new(ctx))
-	s:Add(LocomotionController.new(ctx, fsm))
-	s:Add(SwingController.new(ctx, fsm, input, camera, visuals))
+	local effects = s:Add(Effects.new(ctx))
+	visuals.onImpact = function()
+		effects:Stick()
+	end
+	s:Add(LocomotionController.new(ctx, fsm, motion))
+	s:Add(SwingController.new(ctx, fsm, input, camera, visuals, effects, motion))
+	s:Add(TrickController.new(ctx, fsm, input, camera, visuals, effects, motion))
+	s:Add(PoseController.new(ctx, fsm, motion))
 
-	camera:SetRoot(ctx.Root)
+	camera:SetCharacter(ctx.Root, ctx.Humanoid)
 	s:Add(function()
-		camera:SetRoot(nil)
+		camera:SetCharacter(nil, nil)
 	end)
 
 	fsm:Set(if ctx:IsGrounded() then "Ground" else "Air")

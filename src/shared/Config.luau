@@ -13,7 +13,11 @@ Config.Swing = {
 	AnchorWallOffset = 14,
 	IdealForward = 75, -- the "perfect" anchor is this far ahead...
 	IdealUp = 85, -- ...and this far up
-	SearchYaw = { -45, -25, -10, 0, 10, 25, 45 }, -- degrees left/right of your heading to scan
+	IdealSide = 28, -- ...and this far to one side (alternates left/right, or toward your turn)
+	IdealLength = 100, -- preferred web length; much shorter or longer webs score worse
+	LengthPenalty = 0.35, -- how strongly web length matters when picking
+	TurnSideThreshold = 0.2, -- how much you need to be turning before webs favor that side
+	SearchYaw = { -60, -45, -25, -10, 0, 10, 25, 45, 60 }, -- degrees left/right of your heading to scan
 	SearchPitch = { 25, 40, 55, 70 }, -- degrees above the horizon to scan
 
 	-- Pendulum physics
@@ -75,6 +79,9 @@ Config.Camera = {
 	ReleaseKick = 4,
 	PerfectKick = 8,
 	KickDecay = 5,
+	ShakeDecay = 6,
+	ShakeStrength = 1.2, -- camera offset at full shake (studs, roughly)
+	ShakeFrequency = 18,
 }
 
 Config.Web = {
@@ -92,6 +99,67 @@ Config.Input = {
 		Inputs = { Enum.UserInputType.MouseButton1, Enum.KeyCode.ButtonR2 } :: { any },
 		Title = "Web",
 	},
+	Zip = {
+		Inputs = { Enum.KeyCode.E, Enum.KeyCode.ButtonL1 } :: { any },
+		Title = "Zip",
+	},
+	Dive = {
+		Inputs = { Enum.KeyCode.Q, Enum.KeyCode.ButtonL2 } :: { any },
+		Title = "Dive",
+	},
+}
+
+Config.Tricks = {
+	-- Web zip: shoot a web where the camera aims and get yanked to it
+	ZipRange = 220,
+	ZipSpeed = 160,
+	ZipAccelTime = 0.12, -- seconds to reach full zip speed
+	ZipArriveDistance = 6,
+	ZipMaxTime = 2,
+	ZipEndPop = 45, -- upward pop at the end, so you hop over ledges
+	ZipExitCarry = 0.45, -- fraction of zip speed you keep afterwards
+	ZipCooldown = 0.5,
+	ZipKick = 6, -- camera FOV kick
+
+	-- Double jump (with a front flip)
+	AirJumps = 1,
+	AirJumpPower = 65,
+	AirJumpMinAirTime = 0.12, -- must be airborne this long first
+	FlipTime = 0.55,
+
+	-- Dive: fall faster and turn that into forward speed for the next web
+	DiveGravity = 120,
+	DiveForwardAccel = 40,
+	DiveMaxSpeed = 140,
+}
+
+Config.Pose = {
+	Blend = 12, -- how quickly limbs move to a new pose
+	WeightBlend = 10, -- how quickly poses fade in and out
+	FallPoseMinSpeed = 35, -- spread-out falling pose starts above this speed
+	FallPoseMaxSpeed = 100,
+}
+
+Config.Effects = {
+	-- Built-in Roblox sounds, so nothing needs uploading. Swap Id for any sound asset you like.
+	Sounds = {
+		Shoot = { Id = "rbxasset://sounds/swordlunge.wav", Volume = 0.35, Speed = 1.6 },
+		Stick = { Id = "rbxasset://sounds/action_jump_land.mp3", Volume = 0.3, Speed = 1.8 },
+		Release = { Id = "rbxasset://sounds/swordslash.wav", Volume = 0.3, Speed = 0.8 },
+		Whoosh = { Id = "rbxasset://sounds/swordslash.wav", Volume = 0.22, Speed = 0.55 },
+		Zip = { Id = "rbxasset://sounds/swordlunge.wav", Volume = 0.45, Speed = 1.15 },
+		AirJump = { Id = "rbxasset://sounds/action_jump.mp3", Volume = 0.5, Speed = 1.1 },
+		Wind = { Id = "rbxasset://sounds/action_falling.mp3", Volume = 0.6, Speed = 1 },
+	},
+	WindMinSpeed = 40,
+	WindMaxSpeed = 140,
+	SpeedLinesMinSpeed = 70,
+	SpeedLinesMaxSpeed = 150,
+	SpeedLineCount = 28,
+	TrailMinSpeed = 80,
+	BottomWhooshMinSpeed = 60, -- whoosh + shake when passing the bottom of a swing this fast
+	BottomShake = 0.35,
+	PerfectShake = 0.5,
 }
 
 Config.City = {

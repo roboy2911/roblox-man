@@ -9,6 +9,8 @@ export type CharacterContext = {
 	Root: BasePart,
 	RootAttachment: Attachment,
 	HandAttachment: Attachment,
+	HandAttachments: { [string]: Attachment },
+	IsR15: boolean,
 	WorldParams: RaycastParams,
 	SwingParams: RaycastParams,
 	IsGrounded: (self: CharacterContext) -> boolean,
@@ -23,18 +25,29 @@ function CharacterContext.new(character: Model): CharacterContext?
 		return nil
 	end
 
-	local handName = if humanoid.RigType == Enum.HumanoidRigType.R15 then "RightHand" else "Right Arm"
-	local hand = (character:WaitForChild(handName, 5) or root) :: BasePart
+	local isR15 = humanoid.RigType == Enum.HumanoidRigType.R15
 
 	-- Our own attachments, so we never fight with Roblox's built-in ones.
 	local rootAttachment = Instance.new("Attachment")
 	rootAttachment.Name = "MovementAttachment"
 	rootAttachment.Parent = root
 
-	local handAttachment = Instance.new("Attachment")
-	handAttachment.Name = "WebShooter"
-	handAttachment.Position = if hand == root then Vector3.new(1, 0.5, -0.5) else Vector3.new(0, -hand.Size.Y / 2, 0)
-	handAttachment.Parent = hand
+	-- A web shooter on each hand; swings alternate hands.
+	local function makeShooter(side: string, sign: number): Attachment
+		local handName = if isR15 then side .. "Hand" else side .. " Arm"
+		local hand = (character:WaitForChild(handName, 5) or root) :: BasePart
+		local attachment = Instance.new("Attachment")
+		attachment.Name = side .. "WebShooter"
+		attachment.Position = if hand == root
+			then Vector3.new(sign, 0.5, -0.5)
+			else Vector3.new(0, -hand.Size.Y / 2, 0)
+		attachment.Parent = hand
+		return attachment
+	end
+	local handAttachments = {
+		Right = makeShooter("Right", 1),
+		Left = makeShooter("Left", -1),
+	}
 
 	local worldParams = RaycastParams.new()
 	worldParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -53,7 +66,9 @@ function CharacterContext.new(character: Model): CharacterContext?
 		Humanoid = humanoid,
 		Root = root,
 		RootAttachment = rootAttachment,
-		HandAttachment = handAttachment,
+		HandAttachment = handAttachments.Right,
+		HandAttachments = handAttachments,
+		IsR15 = isR15,
 		WorldParams = worldParams,
 		SwingParams = swingParams,
 	}, CharacterContext)
@@ -70,7 +85,9 @@ end
 
 function CharacterContext:Destroy()
 	self.RootAttachment:Destroy()
-	self.HandAttachment:Destroy()
+	for _, attachment in self.HandAttachments do
+		attachment:Destroy()
+	end
 end
 
 return CharacterContext

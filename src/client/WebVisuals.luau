@@ -22,6 +22,8 @@ function WebVisuals.new(ctx)
 		points = {} :: { Vector3 }, -- [1] = where the web sticks, then corners toward the hand
 		attachments = {} :: { Attachment },
 		beams = {} :: { Beam },
+		hand = ctx.HandAttachment :: Attachment, -- which hand the web comes from
+		onImpact = nil :: ((Vector3) -> ())?, -- called when the web hits
 		travel = 1,
 		active = false,
 		cleaner = Cleaner.new(),
@@ -73,7 +75,7 @@ function WebVisuals:_refresh()
 	for i, beam in self.beams do
 		if i <= count then
 			beam.Attachment0 = self.attachments[i]
-			beam.Attachment1 = if i < count then self.attachments[i + 1] else self.ctx.HandAttachment
+			beam.Attachment1 = if i < count then self.attachments[i + 1] else self.hand
 			beam.Enabled = true
 		else
 			beam.Enabled = false
@@ -81,12 +83,13 @@ function WebVisuals:_refresh()
 	end
 end
 
-function WebVisuals:Attach(stickPoint: Vector3)
+function WebVisuals:Attach(stickPoint: Vector3, hand: Attachment?)
+	self.hand = hand or self.ctx.HandAttachment
 	self.points = { stickPoint }
 	self.travel = 0
 	self.active = true
 	self:_ensure(1)
-	self.attachments[1].WorldPosition = self.ctx.HandAttachment.WorldPosition
+	self.attachments[1].WorldPosition = self.hand.WorldPosition
 	self:_refresh()
 end
 
@@ -130,7 +133,7 @@ function WebVisuals:_place()
 	for i, point in self.points do
 		if i == 1 and self.travel < 1 then
 			local t = 1 - (1 - self.travel) ^ 3 -- ease out
-			self.attachments[1].WorldPosition = self.ctx.HandAttachment.WorldPosition:Lerp(point, t)
+			self.attachments[1].WorldPosition = self.hand.WorldPosition:Lerp(point, t)
 		else
 			self.attachments[i].WorldPosition = point
 		end
@@ -145,6 +148,9 @@ function WebVisuals:_update(dt: number)
 		self.travel = math.min(1, self.travel + dt / W.ShootTime)
 		if self.travel >= 1 then
 			self:_impact(self.points[1])
+			if self.onImpact then
+				self.onImpact(self.points[1])
+			end
 		end
 	end
 	self:_place()

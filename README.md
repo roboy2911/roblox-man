@@ -19,6 +19,9 @@ The avatar type should be **R15** (Game Settings → Avatar). R6 works but loses
 | Action | PC | Gamepad | Mobile |
 |---|---|---|---|
 | Swing (hold) | Left mouse | R2 | "Web" button |
+| Web zip | E | L1 | "Zip" button |
+| Double jump + flip | Space (in the air) | A (in the air) | Jump (in the air) |
+| Dive (hold, in the air) | Q | L2 | "Dive" button |
 | Steer | WASD | Left stick | Thumbstick |
 
 - Hold to swing, let go to fling. You don't need to aim: the web picks the best building in the direction you're pressing (or where the camera faces if you aren't pressing anything).
@@ -28,6 +31,11 @@ The avatar type should be **R15** (Game Settings → Avatar). R6 works but loses
 - Let go while rising at the front of the arc for a **perfect release** (bigger boost).
 - Hold the button while falling and the web fires as soon as a building is in range.
 - Hold backwards in the air to brake.
+- Webs alternate left and right hands/buildings like real web-swinging, and favor the side you're turning toward.
+- Web zip pulls you to wherever the camera is aiming, with a hop at the end to clear ledges.
+- Dive to fall faster and build speed, then catch a web at the bottom for a huge swing.
+- Poses (reaching for the web, tucking, flips, diving) are made in code, so no animations need uploading. R15 only.
+- Sounds use Roblox's built-in sounds; swap them in `Config.Effects.Sounds`.
 
 ## Code layout
 
@@ -35,7 +43,9 @@ The avatar type should be **R15** (Game Settings → Avatar). R6 works but loses
 src/shared/   Config (every tuning number), MathUtil, Signal, Cleaner
 src/server/   CityBuilder (test city), WebCreatureLook (character), CharacterSpawner
 src/client/   MovementState (state machine), InputController, LocomotionController (Ground/Air),
-              SwingController (web swing), WebVisuals, CameraController
+              SwingController (web swing), TrickController (zip, double jump, dive),
+              PoseController (procedural poses), Effects (sounds, speed lines, trail),
+              WebVisuals, CameraController (FOV, shake)
 ```
 
 To change how swinging feels, edit `Config.Swing` in `src/shared/Config.luau`.

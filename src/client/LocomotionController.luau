@@ -14,10 +14,11 @@ local A = Config.Air
 local LocomotionController = {}
 LocomotionController.__index = LocomotionController
 
-function LocomotionController.new(ctx, fsm)
+function LocomotionController.new(ctx, fsm, motion)
 	local self = setmetatable({
 		ctx = ctx,
 		fsm = fsm,
+		motion = motion,
 		cleaner = Cleaner.new(),
 	}, LocomotionController)
 
@@ -75,14 +76,21 @@ end
 
 function LocomotionController:_updateAir(dt: number)
 	local momentum = self.momentum
-	if not momentum.Enabled then
-		return
-	end
-
 	local humanoid = self.ctx.Humanoid
+	local diving = self.motion.diving
 	-- Read the real velocity, so hitting a wall correctly stops us.
 	local flatVelocity = MathUtil.flat(self.ctx.Root.AssemblyLinearVelocity)
 	local speed = flatVelocity.Magnitude
+
+	-- Pick momentum back up if something (like a dive) made us fast again.
+	if not momentum.Enabled then
+		if diving or speed > humanoid.WalkSpeed + A.MomentumThreshold then
+			momentum.Enabled = true
+		else
+			return
+		end
+	end
+
 	if speed < 0.01 then
 		momentum.Enabled = false
 		return
@@ -92,7 +100,7 @@ function LocomotionController:_updateAir(dt: number)
 	local move = MathUtil.flat(humanoid.MoveDirection)
 	if move.Magnitude > 0.1 then
 		move = move.Unit
-		if direction:Dot(move) < -0.3 then
+		if direction:Dot(move) < -0.3 and not diving then
 			-- Holding backwards brakes.
 			speed = math.max(0, speed - A.Brake * dt)
 		else
@@ -100,9 +108,11 @@ function LocomotionController:_updateAir(dt: number)
 		end
 	end
 
-	speed *= math.exp(-A.Drag * dt)
+	if not diving then
+		speed *= math.exp(-A.Drag * dt)
+	end
 
-	if speed <= humanoid.WalkSpeed + 1 then
+	if speed <= humanoid.WalkSpeed + 1 and not diving then
 		-- Slow enough: hand control back to the normal Humanoid.
 		momentum.Enabled = false
 		return
