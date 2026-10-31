@@ -96,7 +96,18 @@ Config.Input = {
 
 Config.City = {
 	Seed = 1337,
-	GridSize = 8, -- blocks per side
+	GridSize = 24, -- blocks per side
+	-- Downtown clusters with the tallest towers, so every part of the city is swingable.
+	-- X/Z are positions across the city (0 = one edge, 1 = the other), Strength scales height.
+	Hubs = {
+		{ X = 0.5, Z = 0.5, Strength = 1.0 },
+		{ X = 0.18, Z = 0.22, Strength = 0.85 },
+		{ X = 0.82, Z = 0.2, Strength = 0.8 },
+		{ X = 0.2, Z = 0.8, Strength = 0.8 },
+		{ X = 0.8, Z = 0.78, Strength = 0.9 },
+	},
+	HubRadius = 0.3, -- how far each cluster's tall buildings spread (fraction of the city)
+	MinHeightScale = 0.4, -- buildings between clusters are at least this tall (relative)
 	BlockSize = 90,
 	RoadWidth = 45,
 	Margin = 300, -- extra ground around the city

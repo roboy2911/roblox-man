@@ -155,9 +155,20 @@ function CityBuilder.Build(): Folder
 		Enum.Material.Asphalt
 	)
 
-	local center = (C.GridSize - 1) / 2
-	local maxDist = math.sqrt(2) * center
 	local plaza = math.floor(C.GridSize / 2)
+	local gridSpan = math.max(C.GridSize - 1, 1)
+
+	-- Tallest near a downtown cluster, shorter in between.
+	local function heightScaleAt(gx: number, gz: number): number
+		local best = C.MinHeightScale
+		for _, hub in C.Hubs do
+			local dx = gx / gridSpan - hub.X
+			local dz = gz / gridSpan - hub.Z
+			local falloff = math.clamp(math.sqrt(dx * dx + dz * dz) / C.HubRadius, 0, 1)
+			best = math.max(best, hub.Strength * (1 - falloff * 0.65))
+		end
+		return best
+	end
 
 	for gx = 0, C.GridSize - 1 do
 		for gz = 0, C.GridSize - 1 do
@@ -187,10 +198,7 @@ function CityBuilder.Build(): Folder
 				spawn.TopSurface = Enum.SurfaceType.Smooth
 				spawn.Parent = streets
 			else
-				-- Taller in the middle of the city, shorter at the edges.
-				local d = math.sqrt((gx - center) ^ 2 + (gz - center) ^ 2) / maxDist
-				local heightScale = 1 - d * 0.6
-				buildBlock(buildings, rng, cx, cz, heightScale)
+				buildBlock(buildings, rng, cx, cz, heightScaleAt(gx, gz))
 			end
 		end
 	end
