@@ -19,8 +19,11 @@ local E = Config.Effects
 local Effects = {}
 Effects.__index = Effects
 
-local function makeSound(name: string, parent: Instance): Sound
+local function makeSound(name: string, parent: Instance): Sound?
 	local def = E.Sounds[name]
+	if not def or def.Id == "" then
+		return nil -- sound turned off
+	end
 	local sound = Instance.new("Sound")
 	sound.Name = name
 	sound.SoundId = def.Id
@@ -36,10 +39,12 @@ function Effects.new(ctx)
 
 	-- Wind loop
 	local wind = makeSound("Wind", ctx.Root)
-	wind.Looped = true
-	wind.Volume = 0
-	wind:Play()
-	cleaner:Add(wind)
+	if wind then
+		wind.Looped = true
+		wind.Volume = 0
+		wind:Play()
+		cleaner:Add(wind)
+	end
 
 	-- Trail
 	local top = Instance.new("Attachment")
@@ -105,6 +110,9 @@ end
 
 function Effects:_play(name: string, pitch: number?)
 	local sound = makeSound(name, self.ctx.Root)
+	if not sound then
+		return
+	end
 	sound.PlaybackSpeed *= (pitch or 1) * self.rng:NextNumber(0.94, 1.06)
 	sound:Play()
 	Debris:AddItem(sound, 4)
@@ -148,9 +156,12 @@ function Effects:_update(dt: number)
 	local speed = self.ctx.Root.AssemblyLinearVelocity.Magnitude
 
 	-- Wind
-	local windDef = E.Sounds.Wind
-	self.wind.Volume = MathUtil.remapClamped(speed, E.WindMinSpeed, E.WindMaxSpeed, 0, windDef.Volume)
-	self.wind.PlaybackSpeed = MathUtil.remapClamped(speed, E.WindMinSpeed, E.WindMaxSpeed, 0.8, 1.4)
+	local wind = self.wind
+	if wind then
+		local windDef = E.Sounds.Wind
+		wind.Volume = MathUtil.remapClamped(speed, E.WindMinSpeed, E.WindMaxSpeed, 0, windDef.Volume)
+		wind.PlaybackSpeed = MathUtil.remapClamped(speed, E.WindMinSpeed, E.WindMaxSpeed, 0.8, 1.4)
+	end
 
 	-- Trail
 	self.trail.Enabled = speed > E.TrailMinSpeed

@@ -53,6 +53,7 @@ function SwingController.new(ctx, fsm, input, camera, visuals, effects, motion)
 		cooldownUntil = 0,
 		nextSide = 1, -- 1 = prefer a building on the right next, -1 = left
 		wasAtBottom = false,
+		swingTime = 0,
 	}, SwingController)
 
 	local driver = Instance.new("LinearVelocity")
@@ -347,9 +348,12 @@ function SwingController:_enter(anchor: Vector3, webPoint: Vector3?, hand: strin
 
 	self.velocity = velocity
 	self.lastCommanded = velocity
+	self.swingTime = 0
 
 	humanoid.AutoRotate = false
 	humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+	-- Apply the launch immediately, so the very first frame already moves.
+	root.AssemblyLinearVelocity = velocity
 
 	self.driver.VectorVelocity = velocity
 	self.driver.Enabled = true
@@ -379,9 +383,12 @@ function SwingController:_update(dt: number)
 
 	local pos = root.Position
 
+	self.swingTime += dt
+
 	-- If the real velocity is far from what we asked for, we hit something: trust reality.
+	-- (Skipped for the first moment, while the character is still getting up to speed.)
 	local actual = root.AssemblyLinearVelocity
-	if (actual - self.lastCommanded).Magnitude > S.CollisionTolerance then
+	if self.swingTime > S.StartGraceTime and (actual - self.lastCommanded).Magnitude > S.CollisionTolerance then
 		self.velocity = actual
 	end
 	local v = self.velocity
@@ -475,8 +482,8 @@ function SwingController:_update(dt: number)
 		self.lean.CFrame = CFrame.lookAt(Vector3.zero, forward.Unit, ropeDir)
 	end
 
-	-- Touching down ends the swing.
-	if v.Y < 0 then
+	-- Touching down ends the swing (not right after starting one from the ground).
+	if v.Y < 0 and self.swingTime > S.StartGraceTime then
 		local hit = workspace:Raycast(pos, Vector3.new(0, -S.LandCheckDistance, 0), ctx.WorldParams)
 		if hit then
 			self.fsm:Set("Air")

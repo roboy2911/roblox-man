@@ -38,6 +38,7 @@ Config.Swing = {
 	CollisionTolerance = 20, -- if real velocity differs this much from ours, we hit something
 	TurnResponsiveness = 10, -- how quickly the body leans into the swing
 	LandCheckDistance = 3.4, -- touching ground this close ends the swing
+	StartGraceTime = 0.3, -- seconds after a web connects before collisions/landing can end the swing
 	ReattachCooldown = 0.12,
 
 	-- Wall avoidance: walls near you gently push you away and turn crashes into glancing slides
@@ -141,15 +142,16 @@ Config.Pose = {
 }
 
 Config.Effects = {
-	-- Built-in Roblox sounds, so nothing needs uploading. Swap Id for any sound asset you like.
+	-- Sounds are off (empty Id) until real ones are picked. To add one, find a sound in the
+	-- Creator Store (Toolbox -> Audio), copy its ID and put it in as "rbxassetid://123456".
 	Sounds = {
-		Shoot = { Id = "rbxasset://sounds/swordlunge.wav", Volume = 0.35, Speed = 1.6 },
-		Stick = { Id = "rbxasset://sounds/action_jump_land.mp3", Volume = 0.3, Speed = 1.8 },
-		Release = { Id = "rbxasset://sounds/swordslash.wav", Volume = 0.3, Speed = 0.8 },
-		Whoosh = { Id = "rbxasset://sounds/swordslash.wav", Volume = 0.22, Speed = 0.55 },
-		Zip = { Id = "rbxasset://sounds/swordlunge.wav", Volume = 0.45, Speed = 1.15 },
-		AirJump = { Id = "rbxasset://sounds/action_jump.mp3", Volume = 0.5, Speed = 1.1 },
-		Wind = { Id = "rbxasset://sounds/action_falling.mp3", Volume = 0.6, Speed = 1 },
+		Shoot = { Id = "", Volume = 0.35, Speed = 1 }, -- web fires
+		Stick = { Id = "", Volume = 0.3, Speed = 1 }, -- web hits a building
+		Release = { Id = "", Volume = 0.3, Speed = 1 }, -- letting go of a swing
+		Whoosh = { Id = "", Volume = 0.22, Speed = 1 }, -- passing the bottom of a fast swing
+		Zip = { Id = "", Volume = 0.45, Speed = 1 }, -- web zip
+		AirJump = { Id = "", Volume = 0.5, Speed = 1 }, -- double jump
+		Wind = { Id = "", Volume = 0.6, Speed = 1 }, -- looping wind, louder with speed
 	},
 	WindMinSpeed = 40,
 	WindMaxSpeed = 140,

@@ -35,7 +35,7 @@ The avatar type should be **R15** (Game Settings → Avatar). R6 works but loses
 - Web zip pulls you to wherever the camera is aiming, with a hop at the end to clear ledges.
 - Dive to fall faster and build speed, then catch a web at the bottom for a huge swing.
 - Poses (reaching for the web, tucking, flips, diving) are made in code, so no animations need uploading. R15 only.
-- Sounds use Roblox's built-in sounds; swap them in `Config.Effects.Sounds`.
+- Sounds are off until real ones are picked: put sound IDs into `Config.Effects.Sounds`.
 
 ## Code layout
 

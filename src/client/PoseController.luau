@@ -1,7 +1,8 @@
 -- Procedural poses, made in code so no animations need uploading.
 --
--- Roblox's Animator sets each joint's Motor6D.Transform every frame. We run just after it
--- (PreSimulation) and blend our own pose on top:
+-- Poses are applied by rotating each joint's C0 (its fixed offset), which Roblox's animations
+-- never touch, so they can't be overwritten. While a pose is active, the default animations
+-- (like the falling one) are stopped so they don't fight it. Poses:
 --   * Swing: the web arm reaches for the web, the other arm and legs tuck at the bottom of the
 --     arc and stretch out at the top.
 --   * Zip: web arm forward, body trailing.
@@ -64,12 +65,18 @@ function PoseController.new(ctx, fsm, motion)
 		fsm = fsm,
 		motion = motion,
 		motors = {} :: { [string]: Motor6D },
+		baseC0 = {} :: { [string]: CFrame },
 		current = {} :: { [string]: CFrame },
 		weight = 0,
+		posing = false, -- whether C0s are currently changed from their defaults
 		cleaner = Cleaner.new(),
 	}, PoseController)
 
 	if not ctx.IsR15 then
+		warn(
+			"[Web Creature] Your character is R6, so swing poses are turned off. "
+				.. "In Studio go to Home > Game Settings > Avatar and set Avatar Type to R15."
+		)
 		return self
 	end
 
@@ -78,10 +85,12 @@ function PoseController.new(ctx, fsm, motion)
 		local motor = part and part:FindFirstChild(jointName)
 		if motor and motor:IsA("Motor6D") then
 			self.motors[jointName] = motor
+			self.baseC0[jointName] = motor.C0
 			self.current[jointName] = CFrame.identity
 		end
 	end
 	self.upperTorso = ctx.Character:FindFirstChild("UpperTorso")
+	self.animator = ctx.Humanoid:FindFirstChildOfClass("Animator")
 
 	self.cleaner:Add(RunService.PreSimulation:Connect(function(dt)
 		self:_update(dt)
@@ -185,6 +194,29 @@ function PoseController:_targets(): ({ [string]: CFrame }, number)
 	return t, 0
 end
 
+-- Stops Roblox's default animations while we're posing, so they don't fight our pose.
+-- The default Animate script starts the right ones again when you land.
+function PoseController:_stopDefaultAnimations()
+	local animator = self.animator
+	if not animator or not animator.Parent then
+		animator = self.ctx.Humanoid:FindFirstChildOfClass("Animator")
+		self.animator = animator
+	end
+	if not animator then
+		return
+	end
+	for _, track in animator:GetPlayingAnimationTracks() do
+		track:Stop(0.15)
+	end
+end
+
+function PoseController:_restore()
+	for name, motor in self.motors do
+		motor.C0 = self.baseC0[name]
+	end
+	self.posing = false
+end
+
 function PoseController:_update(dt: number)
 	local targets, targetWeight = self:_targets()
 	local alpha = MathUtil.expAlpha(P.Blend, dt)
@@ -197,20 +229,36 @@ function PoseController:_update(dt: number)
 		flipRotation = CFrame.Angles(-math.pi * 2 * eased, 0, 0) -- negative X = forward flip
 	end
 
+	for name in self.motors do
+		self.current[name] = self.current[name]:Lerp(targets[name] or CFrame.identity, alpha)
+	end
+
+	if self.weight < 0.01 and not flipRotation then
+		if self.posing then
+			self:_restore()
+		end
+		return
+	end
+
+	if self.weight > 0.3 and not self.fsm:Is("Ground") then
+		self:_stopDefaultAnimations()
+	end
+
+	self.posing = true
 	for name, motor in self.motors do
-		local pose = self.current[name]:Lerp(targets[name] or CFrame.identity, alpha)
-		self.current[name] = pose
-		if self.weight > 0.01 then
-			motor.Transform = motor.Transform:Lerp(pose, self.weight)
-		end
+		local pose = CFrame.identity:Lerp(self.current[name], self.weight)
 		if name == "Root" and flipRotation then
-			motor.Transform *= flipRotation
+			pose *= flipRotation
 		end
+		motor.C0 = self.baseC0[name] * pose
 	end
 end
 
 function PoseController:Destroy()
 	self.cleaner:Clean()
+	if self.posing then
+		self:_restore()
+	end
 end
 
 return PoseController
