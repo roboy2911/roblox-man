@@ -23,6 +23,7 @@ The avatar type should be **R15** (Game Settings → Avatar). R6 works but loses
 
 - Hold to swing, let go to fling. You don't need to aim: the web picks the best building in the direction you're pressing (or where the camera faces if you aren't pressing anything).
 - Steer mid-swing with WASD / the stick: it turns your swing without losing speed. Hold backwards to slow down.
+- Webs wrap around building corners instead of passing through them, so you can swing around a building. Swing back and the web unwraps.
 - Walls near you gently push you away, so you slide past buildings instead of crashing into them.
 - Let go while rising at the front of the arc for a **perfect release** (bigger boost).
 - Hold the button while falling and the web fires as soon as a building is in range.

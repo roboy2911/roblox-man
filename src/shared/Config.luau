@@ -43,6 +43,12 @@ Config.Swing = {
 	WallSideCheck = 10, -- how far to check left and right
 	WallPush = 60,
 
+	-- Web wrapping around building corners
+	MaxWraps = 6, -- most corners one web can bend around
+	WrapOffset = 0.75, -- how far out from the corner the web bends, so it doesn't clip
+	MinWrapSpacing = 2, -- ignore a new corner this close to the last one
+	UnwrapDelay = 0.1, -- seconds before a fresh bend can unwrap (stops flickering)
+
 	-- Letting go
 	ReleaseForwardBoost = 14,
 	ReleaseUpBoost = 22,

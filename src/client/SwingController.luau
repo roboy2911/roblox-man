@@ -32,7 +32,13 @@ function SwingController.new(ctx, fsm, input, camera, visuals)
 		visuals = visuals,
 		cleaner = Cleaner.new(),
 
-		anchor = Vector3.zero,
+		-- The web as a chain of points: [1] is where the swing started, later entries are
+		-- corners it has wrapped around. The last point is what you currently swing from.
+		points = {} :: { Vector3 },
+		webPoint = Vector3.zero, -- where the web visibly sticks
+		floorY = 0,
+		lastPos = Vector3.zero,
+		lastWrapTime = 0,
 		ropeLength = 0,
 		maxLength = math.huge,
 		velocity = Vector3.zero,
@@ -184,6 +190,96 @@ function SwingController:_avoidWalls(pos: Vector3, v: Vector3, dt: number): Vect
 	return v
 end
 
+-- The point you're currently swinging from.
+function SwingController:_pivot(): Vector3
+	return self.points[#self.points]
+end
+
+-- The web reels in if needed so the bottom of the arc stays above the floor.
+function SwingController:_updateMaxLength()
+	self.maxLength = math.max(self:_pivot().Y - (self.floorY + S.GroundClearance), S.MinRopeLength)
+end
+
+-- Returns the building hit if the straight line from `from` to `to` passes through one.
+function SwingController:_blocked(from: Vector3, to: Vector3): RaycastResult?
+	local offset = to - from
+	local length = offset.Magnitude
+	if length < 1 then
+		return nil
+	end
+	-- Stop just short of the target so a corner point doesn't count as blocking itself.
+	return workspace:Raycast(from, offset.Unit * (length - 0.5), self.ctx.SwingParams)
+end
+
+-- Finds the corner the web just caught on. Last frame's line was clear and this frame's isn't,
+-- so we search between the two positions for the line that just grazes the building. Where
+-- that grazing line touches is the corner.
+function SwingController:_findCorner(clearPos: Vector3, blockedPos: Vector3, pivot: Vector3): Vector3?
+	local lo, hi = 0, 1
+	if self:_blocked(clearPos, pivot) then
+		lo = nil -- no clear line to start from; just use the current hit
+	end
+	if lo then
+		for _ = 1, 8 do
+			local mid = (lo + hi) / 2
+			if self:_blocked(clearPos:Lerp(blockedPos, mid), pivot) then
+				hi = mid
+			else
+				lo = mid
+			end
+		end
+	end
+	local hit = self:_blocked(clearPos:Lerp(blockedPos, hi), pivot)
+	if not hit then
+		hit = self:_blocked(blockedPos, pivot)
+	end
+	if not hit then
+		return nil
+	end
+	return hit.Position + hit.Normal * S.WrapOffset
+end
+
+-- Wraps the web around corners it would otherwise pass through, and unwraps it when you
+-- swing back. Returns the point you're now swinging from.
+function SwingController:_updateWraps(pos: Vector3): Vector3
+	local points = self.points
+	local changed = false
+
+	-- Unwrap: if you can see the previous point again, the web no longer touches this corner.
+	if #points > 1 and os.clock() - self.lastWrapTime > S.UnwrapDelay then
+		local previous = points[#points - 1]
+		if not self:_blocked(pos, previous) then
+			local removed = table.remove(points) :: Vector3
+			self.ropeLength += (previous - removed).Magnitude
+			changed = true
+		end
+	end
+
+	-- Wrap: the line to the pivot goes through a building, so bend the web at the corner.
+	local pivot = points[#points]
+	if #points <= S.MaxWraps and self:_blocked(pos, pivot) then
+		local corner = self:_findCorner(self.lastPos, pos, pivot)
+		if corner and (corner - pivot).Magnitude > S.MinWrapSpacing then
+			table.insert(points, corner)
+			self.ropeLength = math.max(S.MinRopeLength, self.ropeLength - (pivot - corner).Magnitude)
+			self.lastWrapTime = os.clock()
+			changed = true
+		end
+	end
+
+	if changed then
+		self:_updateMaxLength()
+		local visualPoints = { self.webPoint }
+		for i = 2, #points do
+			table.insert(visualPoints, points[i])
+		end
+		self.visuals:SetPoints(visualPoints)
+	end
+
+	self.lastPos = pos
+	return points[#points]
+end
+
 -- Height of whatever is under the player (or very low if nothing is).
 function SwingController:_floorHeight(pos: Vector3): number
 	local result = workspace:Raycast(pos, Vector3.new(0, -1000, 0), self.ctx.WorldParams)
@@ -197,15 +293,18 @@ function SwingController:_enter(anchor: Vector3, webPoint: Vector3?)
 	local pos = root.Position
 	local velocity = root.AssemblyLinearVelocity
 
-	self.anchor = anchor
+	self.points = { anchor }
+	self.webPoint = webPoint or anchor
+	self.lastPos = pos
+	self.lastWrapTime = 0
 	self.releaseVelocity = nil
 	self.perfectRelease = false
 
 	-- Start the web a bit shorter than the real distance, so it yanks you on connect.
 	local distance = (anchor - pos).Magnitude
 	self.ropeLength = math.max(distance * S.InitialSnap, S.MinRopeLength)
-	-- The web will reel in if needed so the bottom of the arc stays above the floor.
-	self.maxLength = math.max(anchor.Y - (self:_floorHeight(pos) + S.GroundClearance), S.MinRopeLength)
+	self.floorY = self:_floorHeight(pos)
+	self:_updateMaxLength()
 
 	if ctx:IsGrounded() then
 		velocity += Vector3.new(0, S.GroundLaunchSpeed, 0)
@@ -257,7 +356,8 @@ function SwingController:_update(dt: number)
 	-- Gravity
 	v += Vector3.new(0, -S.Gravity * dt, 0)
 
-	local toAnchor = self.anchor - pos
+	local pivot = self:_updateWraps(pos)
+	local toAnchor = pivot - pos
 	local distance = toAnchor.Magnitude
 	if distance < 0.01 then
 		self:_release()
@@ -338,7 +438,7 @@ function SwingController:_release()
 	local pos = self.ctx.Root.Position
 
 	-- "Perfect" = rising and already past the anchor, i.e. at the front of the arc.
-	local pastAnchor = flat(pos - self.anchor):Dot(flat(v)) > 0
+	local pastAnchor = flat(pos - self:_pivot()):Dot(flat(v)) > 0
 	local perfect = v.Y > S.PerfectMinUpSpeed and pastAnchor
 
 	local forwardBoost = S.ReleaseForwardBoost
