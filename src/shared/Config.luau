@@ -39,8 +39,16 @@ Config.Swing = {
 	DiveCatchBoost = 18,
 	SwingStyles = { "Tuck", "Superman", "Kick" }, -- a random pose style is picked per swing
 	MinRopeLength = 15,
-	ReelSpeed = 70, -- how fast the web shortens to keep you off the ground
-	GroundClearance = 10, -- lowest point of the swing stays this high above the floor
+	ReelSpeed = 140, -- how fast the web shortens to keep you off the ground
+	GroundClearance = 16, -- lowest point of the swing stays this high above the floor
+
+	-- Ground avoidance (like Marvel's Spider-Man): swings bottom out above the street, and if
+	-- you still dip low, your falling speed is turned into forward speed instead of hitting the ground.
+	CushionHeight = 24, -- the cushion starts working this close to the ground
+	CushionStrength = 7, -- how quickly falling speed is cancelled near the ground
+	CushionRedirect = 0.6, -- fraction of the cancelled falling speed added going forward
+	LowHeight = 40, -- below this height, the next web looks for a higher anchor...
+	LowAnchorBoost = 45, -- ...this much higher than usual
 	MaxSpeed = 120,
 	CollisionTolerance = 20, -- if real velocity differs this much from ours, we hit something
 	TurnResponsiveness = 10, -- how quickly the body leans into the swing

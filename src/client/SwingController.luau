@@ -148,7 +148,10 @@ function SwingController:_findAnchor(): (Vector3?, Vector3?, string?)
 	local right = heading:Cross(Vector3.yAxis)
 	local side = self:_preferredSide(heading)
 	local basis = CFrame.lookAt(Vector3.zero, heading)
-	local ideal = pos + heading * S.IdealForward + Vector3.yAxis * S.IdealUp + right * side * S.IdealSide
+	-- Close to the ground? Look for a higher anchor so the swing lifts you up.
+	local height = pos.Y - self:_floorHeight(pos)
+	local up = S.IdealUp + (if height < S.LowHeight then S.LowAnchorBoost else 0)
+	local ideal = pos + heading * S.IdealForward + Vector3.yAxis * up + right * side * S.IdealSide
 
 	local best: Vector3? = nil
 	local bestWebPoint: Vector3? = nil
@@ -405,6 +408,13 @@ function SwingController:_update(dt: number)
 	end
 	local v = self.velocity
 
+	-- Keep the bottom of the arc above whatever is under you right now (street or rooftop).
+	local floorHit = workspace:Raycast(pos, Vector3.new(0, -1000, 0), ctx.WorldParams)
+	if floorHit then
+		self.floorY = floorHit.Position.Y
+		self:_updateMaxLength()
+	end
+
 	-- Reel in to keep the bottom of the arc off the ground.
 	if self.ropeLength > self.maxLength then
 		self.ropeLength = math.max(self.maxLength, self.ropeLength - S.ReelSpeed * dt)
@@ -412,6 +422,15 @@ function SwingController:_update(dt: number)
 
 	-- Gravity
 	v += Vector3.new(0, -S.Gravity * dt, 0)
+
+	-- Ground cushion: near the ground, falling speed turns into forward speed instead.
+	local heightAboveFloor = if floorHit then pos.Y - floorHit.Position.Y else math.huge
+	if heightAboveFloor < S.CushionHeight and v.Y < 0 and self.swingTime > S.StartGraceTime then
+		local closeness = 1 - heightAboveFloor / S.CushionHeight -- 0 at the top of the zone, 1 at the ground
+		local cancelled = -v.Y * math.clamp(closeness * S.CushionStrength * dt, 0, 1)
+		local forward = safeUnit(flat(v), self:_heading())
+		v += Vector3.new(0, cancelled, 0) + forward * cancelled * S.CushionRedirect
+	end
 
 	local pivot = self:_updateWraps(pos)
 	local toAnchor = pivot - pos
