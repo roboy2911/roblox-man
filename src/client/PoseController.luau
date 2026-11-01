@@ -1,7 +1,8 @@
 -- Procedural poses, made in code so no animations need uploading.
 --
--- Poses are applied by rotating each joint's C0 (its fixed offset), which Roblox's animations
--- never touch, so they can't be overwritten. While a pose is active, the default animations
+-- Poses are applied by rotating each joint's fixed offset (C0 on classic Motor6D joints, or the
+-- parent-side attachment on newer AnimationConstraint joints). Roblox's animations never touch
+-- those, so they can't be overwritten. While a pose is active, the default animations
 -- (like the falling one) are stopped so they don't fight it. Poses:
 --   * Swing: the web arm reaches for the web, the other arm and legs tuck at the bottom of the
 --     arc and stretch out at the top.
@@ -56,19 +57,103 @@ local function aimFromDown(dir: Vector3): CFrame
 	return CFrame.fromAxisAngle(axis.Unit, math.acos(dot))
 end
 
+type Joint = {
+	instance: Instance,
+	setOffset: (CFrame) -> (),
+	base: CFrame,
+}
+
+-- Wraps a joint so poses work the same on both joint types.
+local function makeJoint(instance: Instance): Joint?
+	if instance:IsA("Motor6D") then
+		local motor = instance
+		return {
+			instance = motor,
+			base = motor.C0,
+			setOffset = function(cf: CFrame)
+				motor.C0 = cf
+			end,
+		}
+	elseif instance:IsA("AnimationConstraint") then
+		local attachment = instance.Attachment0
+		if not attachment then
+			return nil
+		end
+		return {
+			instance = instance,
+			base = attachment.CFrame,
+			setOffset = function(cf: CFrame)
+				attachment.CFrame = cf
+			end,
+		}
+	end
+	return nil
+end
+
 local PoseController = {}
 PoseController.__index = PoseController
+
+-- Finds every joint we pose, wherever it lives in the character.
+function PoseController:_findJoints(report: boolean)
+	local character = self.ctx.Character
+	local found = {}
+	for _, descendant in character:GetDescendants() do
+		if JOINTS[descendant.Name] and not found[descendant.Name] then
+			local joint = makeJoint(descendant)
+			if joint then
+				found[descendant.Name] = joint
+			end
+		end
+	end
+	self.joints = found
+	self.upperTorso = character:FindFirstChild("UpperTorso")
+
+	if report then
+		local count, kinds = 0, {}
+		for _, joint in found do
+			count += 1
+			kinds[joint.instance.ClassName] = true
+		end
+		local kindList = {}
+		for kind in kinds do
+			table.insert(kindList, kind)
+		end
+		if count == 0 then
+			warn("[Web Creature] Poses are off: couldn't find any body joints in the character.")
+		else
+			print(`[Web Creature] Poses ready: {count} joints ({table.concat(kindList, ", ")})`)
+		end
+	end
+end
+
+-- If Roblox rebuilt the body (e.g. while loading the avatar), find the new joints.
+function PoseController:_checkJoints()
+	local now = os.clock()
+	if now < self.nextJointCheck then
+		return
+	end
+	self.nextJointCheck = now + 0.5
+	for _, joint in self.joints do
+		if not joint.instance:IsDescendantOf(self.ctx.Character) then
+			self:_findJoints(false)
+			return
+		end
+	end
+	if next(self.joints) == nil then
+		self:_findJoints(false)
+	end
+end
 
 function PoseController.new(ctx, fsm, motion)
 	local self = setmetatable({
 		ctx = ctx,
 		fsm = fsm,
 		motion = motion,
-		motors = {} :: { [string]: Motor6D },
-		baseC0 = {} :: { [string]: CFrame },
+		joints = {} :: { [string]: Joint },
 		current = {} :: { [string]: CFrame },
 		weight = 0,
-		posing = false, -- whether C0s are currently changed from their defaults
+		posing = false, -- whether joints are currently changed from their defaults
+		nextJointCheck = 0,
 		cleaner = Cleaner.new(),
 	}, PoseController)
 
@@ -80,16 +165,10 @@ function PoseController.new(ctx, fsm, motion)
 		return self
 	end
 
-	for jointName, partName in JOINTS do
-		local part = ctx.Character:FindFirstChild(partName)
-		local motor = part and part:FindFirstChild(jointName)
-		if motor and motor:IsA("Motor6D") then
-			self.motors[jointName] = motor
-			self.baseC0[jointName] = motor.C0
-			self.current[jointName] = CFrame.identity
-		end
+	for jointName in JOINTS do
+		self.current[jointName] = CFrame.identity
 	end
-	self.upperTorso = ctx.Character:FindFirstChild("UpperTorso")
+	self:_findJoints(true)
 	self.animator = ctx.Humanoid:FindFirstChildOfClass("Animator")
 
 	self.cleaner:Add(RunService.PreSimulation:Connect(function(dt)
@@ -211,13 +290,16 @@ function PoseController:_stopDefaultAnimations()
 end
 
 function PoseController:_restore()
-	for name, motor in self.motors do
-		motor.C0 = self.baseC0[name]
+	for _, joint in self.joints do
+		if joint.instance.Parent then
+			joint.setOffset(joint.base)
+		end
 	end
 	self.posing = false
 end
 
 function PoseController:_update(dt: number)
+	self:_checkJoints()
 	local targets, targetWeight = self:_targets()
 	local alpha = MathUtil.expAlpha(P.Blend, dt)
 	self.weight += (targetWeight - self.weight) * MathUtil.expAlpha(P.WeightBlend, dt)
@@ -229,8 +311,8 @@ function PoseController:_update(dt: number)
 		flipRotation = CFrame.Angles(-math.pi * 2 * eased, 0, 0) -- negative X = forward flip
 	end
 
-	for name in self.motors do
-		self.current[name] = self.current[name]:Lerp(targets[name] or CFrame.identity, alpha)
+	for name, current in self.current do
+		self.current[name] = current:Lerp(targets[name] or CFrame.identity, alpha)
 	end
 
 	if self.weight < 0.01 and not flipRotation then
@@ -245,12 +327,12 @@ function PoseController:_update(dt: number)
 	end
 
 	self.posing = true
-	for name, motor in self.motors do
+	for name, joint in self.joints do
 		local pose = CFrame.identity:Lerp(self.current[name], self.weight)
 		if name == "Root" and flipRotation then
 			pose *= flipRotation
 		end
-		motor.C0 = self.baseC0[name] * pose
+		joint.setOffset(joint.base * pose)
 	end
 end
 

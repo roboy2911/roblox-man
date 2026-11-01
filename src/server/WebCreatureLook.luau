@@ -200,6 +200,28 @@ local function buildBackLegs(model: Model, torso: BasePart)
 	end
 end
 
+local RED_PARTS = { LeftHand = true, RightHand = true, LeftFoot = true, RightFoot = true }
+
+-- Paints hands and feet red, and keeps them red: Roblox's avatar loading (body colors) can
+-- repaint them afterwards, and can even swap in new body parts.
+local function keepLimbsRed(character: Model)
+	local function paint(part: Instance)
+		if not (RED_PARTS[part.Name] and part:IsA("BasePart")) then
+			return
+		end
+		part.Color = C.Accent
+		part:GetPropertyChangedSignal("Color"):Connect(function()
+			if part.Color ~= C.Accent then
+				part.Color = C.Accent
+			end
+		end)
+	end
+	for _, child in character:GetChildren() do
+		paint(child)
+	end
+	character.ChildAdded:Connect(paint)
+end
+
 -- Waits (up to timeout) for Roblox to finish applying the avatar, so our colors aren't overwritten.
 local function waitForAppearance(player: Player, timeout: number)
 	if player:HasAppearanceLoaded() then
@@ -238,12 +260,7 @@ function WebCreatureLook.Decorate(player: Player, character: Model)
 
 	-- Red gloves and boots (R15 only; R6 has no separate hands/feet)
 	if isR15 then
-		for _, name in { "LeftHand", "RightHand", "LeftFoot", "RightFoot" } do
-			local part = character:FindFirstChild(name)
-			if part and part:IsA("BasePart") then
-				part.Color = C.Accent
-			end
-		end
+		keepLimbsRed(character)
 	end
 
 	local old = character:FindFirstChild("WebCreatureGear")
