@@ -1,13 +1,11 @@
 -- On-screen UI:
 --   * Speed meter (bottom middle)
---   * Popups for tricks: "WALL RUN!", "POINT LAUNCH!", ...
 --   * Crosshair in the middle that lights up red when a web zip target is in reach
 --   * Control hints (bottom left) that match your device; press H to hide/show
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
 local Cleaner = require(ReplicatedStorage.Shared.Cleaner)
@@ -42,13 +40,6 @@ local HINTS = {
 		"Dive in air  Dive",
 		"Fly along walls  Wall run",
 	},
-}
-
-local POPUPS = {
-	PointLaunch = "POINT LAUNCH!",
-	WallRun = "WALL RUN!",
-	WallJump = "WALL JUMP!",
-	DiveCatch = "DIVE CATCH!",
 }
 
 local function label(parent: Instance, props: { [string]: any }): TextLabel
@@ -176,10 +167,6 @@ function HUD.new(ctx, motion)
 		end
 	end))
 
-	cleaner:Add(motion.events:Connect(function(name: string, value: any)
-		self:_onEvent(name, value)
-	end))
-
 	cleaner:Add(RunService.RenderStepped:Connect(function(dt)
 		self:_update(dt)
 	end))
@@ -217,43 +204,6 @@ function HUD:_refreshHints()
 			TextXAlignment = Enum.TextXAlignment.Left,
 			TextTransparency = 0.15,
 		})
-	end
-end
-
-function HUD:Popup(text: string)
-	local popup = label(self.gui, {
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.3),
-		Size = UDim2.fromOffset(500, 70),
-		Text = text,
-		TextSize = 48,
-		TextColor3 = H.AccentColor,
-	})
-	local scale = Instance.new("UIScale")
-	scale.Scale = 1.6
-	scale.Parent = popup
-	TweenService:Create(scale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 })
-		:Play()
-	task.delay(0.6, function()
-		if popup.Parent then
-			TweenService:Create(popup, TweenInfo.new(0.4), {
-				TextTransparency = 1,
-				Position = UDim2.fromScale(0.5, 0.26),
-			}):Play()
-			local stroke = popup:FindFirstChildOfClass("UIStroke")
-			if stroke then
-				TweenService:Create(stroke, TweenInfo.new(0.4), { Transparency = 1 }):Play()
-			end
-		end
-	end)
-	task.delay(1.1, function()
-		popup:Destroy()
-	end)
-end
-
-function HUD:_onEvent(name: string, _value: any)
-	if POPUPS[name] then
-		self:Popup(POPUPS[name])
 	end
 end
 
