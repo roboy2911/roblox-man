@@ -77,8 +77,8 @@ function SwingController.new(ctx, fsm, input, camera, visuals, effects, motion)
 	self.lean = self.cleaner:Add(lean)
 
 	fsm:Register("Swing", {
-		Enter = function(_previous, pivot: Vector3, webPoint: Vector3, hand: string)
-			self:_enter(pivot, webPoint, hand)
+		Enter = function(previous, pivot: Vector3, webPoint: Vector3, hand: string)
+			self:_enter(pivot, webPoint, hand, previous)
 		end,
 		Exit = function(nextState: string)
 			self:_exit(nextState)
@@ -91,7 +91,7 @@ function SwingController.new(ctx, fsm, input, camera, visuals, effects, motion)
 	-- Holding the button while not swinging keeps looking for an anchor, so you can hold it
 	-- while falling and the web fires the moment a building comes in range.
 	fsm:AddHook(function()
-		if not (fsm:Is("Ground") or fsm:Is("Air")) or not input:IsDown("Swing") then
+		if not (fsm:Is("Ground") or fsm:Is("Air") or fsm:Is("WallRun")) or not input:IsDown("Swing") then
 			return
 		end
 		if os.clock() < self.cooldownUntil or not ctx:IsAlive() then
@@ -317,7 +317,7 @@ function SwingController:_floorHeight(pos: Vector3): number
 	return if result then result.Position.Y else pos.Y - 1000
 end
 
-function SwingController:_enter(anchor: Vector3, webPoint: Vector3?, hand: string?)
+function SwingController:_enter(anchor: Vector3, webPoint: Vector3?, hand: string?, previous: string?)
 	local ctx = self.ctx
 	local root = ctx.Root
 	local humanoid = ctx.Humanoid
@@ -346,6 +346,12 @@ function SwingController:_enter(anchor: Vector3, webPoint: Vector3?, hand: strin
 	local kick = projectOnPlane(self:_heading(), ropeDir)
 	velocity += safeUnit(kick, Vector3.zero) * S.AttachKick
 
+	-- Dive catch: catching a web while diving fast gives extra speed along the swing.
+	local diveCatch = previous == "Air" and self.motion.diving and -velocity.Y > S.DiveCatchMinFallSpeed
+	if diveCatch then
+		velocity += safeUnit(kick, Vector3.zero) * S.DiveCatchBoost
+	end
+
 	self.velocity = velocity
 	self.lastCommanded = velocity
 	self.swingTime = 0
@@ -366,6 +372,12 @@ function SwingController:_enter(anchor: Vector3, webPoint: Vector3?, hand: strin
 	self.motion.webHand = webHand
 	self.motion.pivot = self.webPoint
 	self.motion.lowness = 0
+	self.motion.swingStyle = S.SwingStyles[math.random(1, #S.SwingStyles)]
+	self.motion.events:Fire("SwingStart")
+	if diveCatch then
+		self.motion.events:Fire("DiveCatch")
+		self.camera:Shake(0.3)
+	end
 
 	self.visuals:Attach(self.webPoint, ctx.HandAttachments[webHand])
 	self.effects:Shoot()
@@ -413,8 +425,11 @@ function SwingController:_update(dt: number)
 	-- Steering: movement keys turn your direction of travel (keeping your speed),
 	-- and holding the opposite direction brakes.
 	local move = flat(ctx.Humanoid.MoveDirection)
+	local steerAmount = 0 -- -1 = steering left, 1 = right (for the body lean)
 	if move.Magnitude > 0.1 then
 		move = move.Unit
+		local travelRight = safeUnit(flat(v), move):Cross(Vector3.yAxis)
+		steerAmount = math.clamp(move:Dot(travelRight), -1, 1)
 		local horizontal = flat(v)
 		local hSpeed = horizontal.Magnitude
 		if hSpeed > 1 then
@@ -454,7 +469,14 @@ function SwingController:_update(dt: number)
 	if distance > self.ropeLength then
 		local radial = v:Dot(ropeDir) -- positive = moving toward anchor
 		if radial < 0 then
+			local speedBefore = v.Magnitude
 			v -= ropeDir * radial
+			-- Give most of the cancelled speed back along the arc, so the web redirects you
+			-- instead of stopping you.
+			local lost = speedBefore - v.Magnitude
+			if lost > 0 and v.Magnitude > 0.1 then
+				v += v.Unit * lost * S.RedirectEfficiency
+			end
 		end
 		local stretch = distance - self.ropeLength
 		correction = ropeDir * math.min(stretch * S.RopeStiffness, S.MaxCorrectionSpeed)
@@ -473,13 +495,20 @@ function SwingController:_update(dt: number)
 	self.lastCommanded = commanded
 	self.driver.VectorVelocity = commanded
 
-	-- Lean into the web: body "up" points at the anchor, facing the direction of travel.
+	-- A slack web droops.
+	self.visuals:SetSlack(math.max(0, self.ropeLength - distance))
+
+	-- Lean into the web: body "up" points at the anchor, facing the direction of travel,
+	-- banking into turns when steering.
 	local forward = projectOnPlane(v, ropeDir)
 	if forward.Magnitude < 2 then
 		forward = projectOnPlane(self:_heading(), ropeDir)
 	end
 	if forward.Magnitude > 1e-3 then
-		self.lean.CFrame = CFrame.lookAt(Vector3.zero, forward.Unit, ropeDir)
+		forward = forward.Unit
+		local bodyRight = forward:Cross(ropeDir)
+		local up = safeUnit(ropeDir + bodyRight * steerAmount * S.SteerLean, ropeDir)
+		self.lean.CFrame = CFrame.lookAt(Vector3.zero, forward, up)
 	end
 
 	-- Touching down ends the swing (not right after starting one from the ground).
@@ -512,8 +541,10 @@ function SwingController:_release()
 	self.releaseVelocity = MathUtil.clampMagnitude(v, S.MaxReleaseSpeed)
 	self.perfectRelease = perfect
 	self.effects:Release(perfect)
+	self.motion.events:Fire("Release", perfect)
 	if perfect then
 		self.motion.flipStart = os.clock()
+		self.motion.flipKind = "Front"
 		self.camera:Shake(Config.Effects.PerfectShake)
 	end
 	self.fsm:Set("Air")
@@ -525,7 +556,7 @@ function SwingController:_exit(_nextState: string)
 
 	self.driver.Enabled = false
 	self.lean.Enabled = false
-	self.visuals:Detach()
+	self.visuals:Detach(true)
 	self.motion.pivot = nil
 	self.motion.lowness = 0
 

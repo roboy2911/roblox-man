@@ -31,6 +31,13 @@ Config.Swing = {
 	InitialSnap = 0.98, -- web starts slightly shorter than the distance, for a light tug on connect
 	RopeStiffness = 8, -- how quickly a stretched web pulls you back to its length
 	MaxCorrectionSpeed = 30, -- limit on that pull
+	-- When the web goes taut, this fraction of the speed it would cancel is redirected along the
+	-- arc instead. Chained swings keep their speed and feel smooth instead of jerky.
+	RedirectEfficiency = 0.85,
+	SteerLean = 0.35, -- how much the body banks when steering mid-swing
+	DiveCatchMinFallSpeed = 50, -- catching a web while diving this fast gives a bonus
+	DiveCatchBoost = 18,
+	SwingStyles = { "Tuck", "Superman", "Kick" }, -- a random pose style is picked per swing
 	MinRopeLength = 15,
 	ReelSpeed = 70, -- how fast the web shortens to keep you off the ground
 	GroundClearance = 10, -- lowest point of the swing stays this high above the floor
@@ -62,6 +69,14 @@ Config.Swing = {
 	MaxReleaseSpeed = 140,
 }
 
+Config.Landing = {
+	RollMinSpeed = 55, -- land faster than this and you roll out of it
+	RollTime = 0.45,
+	SlideTime = 0.5, -- after a fast landing you keep sliding forward this long
+	SlideKeep = 0.6, -- fraction of horizontal speed kept as the slide
+	DustMinSpeed = 35,
+}
+
 Config.Air = {
 	MomentumThreshold = 4, -- only keep momentum when faster than WalkSpeed + this
 	Drag = 0.45, -- how quickly air speed bleeds off (per second, exponential)
@@ -83,16 +98,31 @@ Config.Camera = {
 	ShakeDecay = 6,
 	ShakeStrength = 1.2, -- camera offset at full shake (studs, roughly)
 	ShakeFrequency = 18,
+
+	-- Auto-follow: when you aren't moving the camera, it turns to face where you're flying
+	AutoFollowDelay = 1.0, -- seconds after you last moved the camera
+	AutoFollowSpeed = 1.6,
+	AutoFollowMinSpeed = 40,
+	RollMax = 6, -- degrees the camera tilts in turns
+	RollSmoothing = 4,
 }
 
 Config.Web = {
 	ShootTime = 0.08, -- seconds for the web to fly from hand to anchor
-	Width0 = 0.12,
-	Width1 = 0.22,
+	CoreWidth0 = 0.22, -- at the anchor
+	CoreWidth1 = 0.12, -- at the hand
+	GlowWidth = 0.7,
+	GlowTransparency = 0.8,
 	Color = Color3.fromRGB(245, 245, 255),
+	GlowColor = Color3.fromRGB(200, 225, 255),
 	ImpactColor = Color3.fromRGB(255, 255, 255),
 	ImpactSize = 3,
 	ImpactTime = 0.25,
+	WobbleAmplitude = 3, -- web wobbles side to side right after it connects
+	WobbleFrequency = 18,
+	WobbleDecay = 6,
+	SagFactor = 0.6, -- how much a slack web droops
+	RemnantTime = 0.5, -- a let-go web strand falls away for this long
 }
 
 Config.Input = {
@@ -128,10 +158,42 @@ Config.Tricks = {
 	AirJumpMinAirTime = 0.12, -- must be airborne this long first
 	FlipTime = 0.55,
 
+	-- Zip aim assist: if the crosshair just misses a building, search a small cone around it
+	ZipAssistAngle = 8, -- degrees
+	-- Point launch: press jump right as a zip ends for a big launch
+	PointLaunchWindow = 0.3, -- seconds around the end of the zip
+	PointLaunchForward = 70,
+	PointLaunchUp = 85,
+
 	-- Dive: fall faster and turn that into forward speed for the next web
 	DiveGravity = 120,
 	DiveForwardAccel = 40,
 	DiveMaxSpeed = 140,
+}
+
+Config.WallRun = {
+	MinSpeed = 35, -- need this much speed to start a wall run
+	CheckDistance = 3.5, -- how close a wall must be
+	MaxAngle = 0.55, -- how head-on you can hit the wall and still run (0 = parallel only)
+	Duration = 1.6, -- longest wall run
+	Lift = 25, -- upward speed when starting
+	Gravity = 30, -- light gravity while running
+	Drag = 0.15,
+	MinStaySpeed = 25,
+	Stick = 8, -- pull toward the wall
+	JumpOut = 50, -- wall jump: push away from the wall...
+	JumpUp = 60, -- ...upward...
+	JumpForwardKeep = 0.85, -- ...and keep this much forward speed
+	Cooldown = 0.4,
+}
+
+Config.HUD = {
+	Font = Enum.Font.GothamBlack,
+	TextColor = Color3.fromRGB(255, 255, 255),
+	AccentColor = Color3.fromRGB(220, 30, 45),
+	SpeedMeterMax = 150,
+	ChainMin = 2, -- show the chain counter from this many moves
+	HelpKey = Enum.KeyCode.H,
 }
 
 Config.Pose = {
@@ -189,19 +251,57 @@ Config.City = {
 	RoadColor = Color3.fromRGB(45, 46, 52),
 	SidewalkColor = Color3.fromRGB(150, 150, 155),
 	LedgeColor = Color3.fromRGB(85, 88, 98),
-	BuildingColors = {
-		Color3.fromRGB(120, 125, 135),
-		Color3.fromRGB(165, 160, 150),
-		Color3.fromRGB(95, 105, 120),
-		Color3.fromRGB(140, 145, 155),
-		Color3.fromRGB(110, 100, 95),
-		Color3.fromRGB(180, 182, 188),
+	-- Building styles. Tall towers lean toward Glass/Marble, short ones toward Brick/Concrete.
+	Styles = {
+		{
+			Name = "Glass",
+			Material = Enum.Material.Glass,
+			Colors = { Color3.fromRGB(70, 95, 120), Color3.fromRGB(85, 110, 125), Color3.fromRGB(60, 80, 100) },
+			Reflectance = 0.15,
+			Pillars = true,
+			MinHeight = 120,
+		},
+		{
+			Name = "Marble",
+			Material = Enum.Material.Marble,
+			Colors = { Color3.fromRGB(210, 205, 195), Color3.fromRGB(190, 190, 185) },
+			Reflectance = 0,
+			Pillars = true,
+			MinHeight = 90,
+		},
+		{
+			Name = "Concrete",
+			Material = Enum.Material.Concrete,
+			Colors = { Color3.fromRGB(150, 150, 155), Color3.fromRGB(120, 125, 135), Color3.fromRGB(170, 165, 155) },
+			Reflectance = 0,
+			Pillars = false,
+			MinHeight = 0,
+		},
+		{
+			Name = "Brick",
+			Material = Enum.Material.Brick,
+			Colors = { Color3.fromRGB(140, 75, 60), Color3.fromRGB(120, 85, 70), Color3.fromRGB(160, 100, 80) },
+			Reflectance = 0,
+			Pillars = false,
+			MinHeight = 0,
+		},
 	},
-	BuildingMaterials = {
-		Enum.Material.Concrete,
-		Enum.Material.SmoothPlastic,
-		Enum.Material.Slate,
-	},
+
+	-- Rooftop props (chance per roof)
+	WaterTowerChance = 0.3,
+	AcUnitChance = 0.5,
+	AntennaChance = 0.6, -- only on roofs taller than AntennaMinHeight
+	AntennaMinHeight = 200,
+	RoofHutChance = 0.35,
+
+	-- Streets
+	ParkChance = 0.06, -- chance a block is a park instead of buildings
+	LaneColor = Color3.fromRGB(230, 200, 60),
+	StreetlightColor = Color3.fromRGB(55, 58, 65),
+	LampColor = Color3.fromRGB(255, 235, 190),
+	GrassColor = Color3.fromRGB(85, 140, 70),
+	TrunkColor = Color3.fromRGB(95, 70, 50),
+	LeafColors = { Color3.fromRGB(70, 130, 60), Color3.fromRGB(90, 150, 70), Color3.fromRGB(60, 115, 55) },
 }
 
 Config.Character = {

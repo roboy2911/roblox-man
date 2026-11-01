@@ -60,6 +60,44 @@ local function weldPart(model: Model, base: BasePart, props: PartProps): Part
 	return part
 end
 
+-- A stick between two world points, attached with a Motor6D at `a` so it can be rotated
+-- there (like a shoulder). The joint's -Z axis points along the stick.
+local function jointedSegment(
+	model: Model,
+	parentPart: BasePart,
+	a: Vector3,
+	b: Vector3,
+	thickness: number,
+	color: Color3,
+	material: Enum.Material,
+	name: string
+): Part
+	local part = Instance.new("Part")
+	part.Name = name .. "Part"
+	part.Size = Vector3.new(thickness, thickness, (b - a).Magnitude)
+	part.CFrame = CFrame.lookAt((a + b) / 2, b)
+	part.Color = color
+	part.Material = material
+	part.Anchored = false
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.Massless = true
+	part.CastShadow = false
+
+	local jointWorld = CFrame.lookAt(a, b)
+	local motor = Instance.new("Motor6D")
+	motor.Name = name
+	motor.Part0 = parentPart
+	motor.Part1 = part
+	motor.C0 = parentPart.CFrame:ToObjectSpace(jointWorld)
+	motor.C1 = part.CFrame:ToObjectSpace(jointWorld)
+	motor.Parent = part
+
+	part.Parent = model
+	return part
+end
+
 -- A stick between two world points.
 local function segment(model: Model, base: BasePart, a: Vector3, b: Vector3, thickness: number, color: Color3, material: Enum.Material?): Part
 	return weldPart(model, base, {
@@ -174,28 +212,100 @@ local function buildBackLegs(model: Model, torso: BasePart)
 		Shape = Enum.PartType.Cylinder,
 	})
 
-	-- Two legs per side: { base, knee, tip } in torso space (scaled by k)
+	-- Two legs per side: { base, knee, tip } in torso space (scaled by k).
+	-- Each leg has two real joints (Motor6D "SpiderHip_*" and "SpiderKnee_*") so the client
+	-- can animate them.
 	local legs = {
 		{ Vector3.new(0.35, 0.3, 0.15), Vector3.new(1.3, 1.25, 0.75), Vector3.new(1.9, 0.2, 0.9) },
 		{ Vector3.new(0.35, 0.0, 0.15), Vector3.new(1.4, 0.5, 0.9), Vector3.new(1.75, -0.8, 0.7) },
 	}
 	for side = -1, 1, 2 do
-		for _, leg in legs do
+		local sideName = if side > 0 then "R" else "L"
+		for index, leg in legs do
+			local id = sideName .. index
 			local base = at(side * leg[1].X, leg[1].Y, leg[1].Z)
 			local knee = at(side * leg[2].X, leg[2].Y, leg[2].Z)
 			local tip = at(side * leg[3].X, leg[3].Y, leg[3].Z)
 			local tipStart = knee:Lerp(tip, 0.72)
 
-			segment(model, torso, base, knee, 0.16 * k, C.Metal, Enum.Material.Metal)
-			weldPart(model, torso, {
+			local upper = jointedSegment(
+				model, torso, base, knee, 0.16 * k, C.Metal, Enum.Material.Metal, "SpiderHip_" .. id
+			)
+			weldPart(model, upper, {
 				Size = Vector3.one * 0.24 * k,
 				CFrame = CFrame.new(knee),
 				Color = C.Suit,
 				Material = Enum.Material.Metal,
 				Shape = Enum.PartType.Ball,
 			})
-			segment(model, torso, knee, tipStart, 0.11 * k, C.Metal, Enum.Material.Metal)
-			segment(model, torso, tipStart, tip, 0.09 * k, C.Accent, Enum.Material.Neon)
+			local lower = jointedSegment(
+				model, upper, knee, tipStart, 0.11 * k, C.Metal, Enum.Material.Metal, "SpiderKnee_" .. id
+			)
+			segment(model, lower, tipStart, tip, 0.09 * k, C.Accent, Enum.Material.Neon)
+		end
+	end
+end
+
+-- Extra suit details on the arms, legs and waist (R15 only).
+local function buildSuitDetails(model: Model, character: Model)
+	local function part(name: string): BasePart?
+		local found = character:FindFirstChild(name)
+		return if found and found:IsA("BasePart") then found else nil
+	end
+
+	-- Belt with a red diamond buckle
+	local lowerTorso = part("LowerTorso")
+	if lowerTorso then
+		local size = lowerTorso.Size
+		local beltY = size.Y / 2 - 0.12
+		weldPart(model, lowerTorso, {
+			Size = Vector3.new(size.X + 0.06, 0.2, size.Z + 0.06),
+			CFrame = lowerTorso.CFrame * CFrame.new(0, beltY, 0),
+			Color = C.Metal,
+			Material = Enum.Material.Metal,
+		})
+		weldPart(model, lowerTorso, {
+			Size = Vector3.new(0.22, 0.22, 0.06),
+			CFrame = lowerTorso.CFrame * CFrame.new(0, beltY, -size.Z / 2 - 0.05) * CFrame.Angles(0, 0, math.rad(45)),
+			Color = C.Accent,
+			Material = Enum.Material.Neon,
+		})
+	end
+
+	-- Red stripes down the outside of each arm and leg
+	for _, sideInfo in { { "Right", 1 }, { "Left", -1 } } do
+		local side, s = sideInfo[1], sideInfo[2]
+		for _, limb in { "UpperArm", "LowerArm", "UpperLeg", "LowerLeg" } do
+			local limbPart = part(side .. limb)
+			if limbPart then
+				local size = limbPart.Size
+				weldPart(model, limbPart, {
+					Size = Vector3.new(0.05, size.Y * 0.85, 0.12),
+					CFrame = limbPart.CFrame * CFrame.new(s * (size.X / 2 + 0.02), 0, 0),
+					Color = C.Accent,
+				})
+			end
+		end
+
+		-- Web shooter on each wrist: a metal band with a glowing nozzle underneath
+		local forearm = part(side .. "LowerArm")
+		if forearm then
+			local size = forearm.Size
+			local wristY = -size.Y / 2 + 0.15
+			weldPart(model, forearm, {
+				Size = Vector3.new(0.22, size.X + 0.12, size.Z + 0.12),
+				CFrame = forearm.CFrame * CFrame.new(0, wristY, 0) * CFrame.Angles(0, 0, math.rad(90)),
+				Color = C.Metal,
+				Material = Enum.Material.Metal,
+				Shape = Enum.PartType.Cylinder,
+			})
+			weldPart(model, forearm, {
+				Size = Vector3.new(0.12, 0.12, 0.12),
+				CFrame = forearm.CFrame * CFrame.new(0, wristY, -size.Z / 2 - 0.07),
+				Color = C.Accent,
+				Material = Enum.Material.Neon,
+				Shape = Enum.PartType.Ball,
+			})
 		end
 	end
 end
@@ -273,6 +383,9 @@ function WebCreatureLook.Decorate(player: Player, character: Model)
 	buildEyes(gear, head)
 	buildChestEmblem(gear, torso)
 	buildBackLegs(gear, torso)
+	if isR15 then
+		buildSuitDetails(gear, character)
+	end
 
 	gear.Parent = character
 end

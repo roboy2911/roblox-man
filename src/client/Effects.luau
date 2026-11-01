@@ -2,7 +2,8 @@
 --   * one-shot sounds (web shoot, stick, release, whoosh, zip, double jump)
 --   * wind that gets louder and higher-pitched with speed
 --   * speed lines around the edge of the screen
---   * a glowing trail behind you when you're really moving
+--   * a glowing trail behind you, and thin streaks from your hands, when you're really moving
+--   * a dust puff when you land hard
 -- All local to this player for now.
 
 local Debris = game:GetService("Debris")
@@ -33,7 +34,33 @@ local function makeSound(name: string, parent: Instance): Sound?
 	return sound
 end
 
-function Effects.new(ctx)
+-- Thin white streaks from each hand at high speed.
+local function makeHandTrail(hand: Attachment, cleaner): Trail
+	local top = Instance.new("Attachment")
+	top.Name = "HandTrailTop"
+	top.Position = hand.Position + Vector3.new(0, 0.15, 0)
+	top.Parent = hand.Parent
+	local bottom = Instance.new("Attachment")
+	bottom.Name = "HandTrailBottom"
+	bottom.Position = hand.Position - Vector3.new(0, 0.15, 0)
+	bottom.Parent = hand.Parent
+	local trail = Instance.new("Trail")
+	trail.Attachment0 = top
+	trail.Attachment1 = bottom
+	trail.Lifetime = 0.2
+	trail.FaceCamera = true
+	trail.LightEmission = 1
+	trail.Color = ColorSequence.new(Color3.new(1, 1, 1))
+	trail.Transparency = NumberSequence.new(0.5, 1)
+	trail.Enabled = false
+	trail.Parent = hand.Parent
+	cleaner:Add(trail)
+	cleaner:Add(top)
+	cleaner:Add(bottom)
+	return trail
+end
+
+function Effects.new(ctx, motion)
 	local cleaner = Cleaner.new()
 	local rng = Random.new()
 
@@ -91,11 +118,17 @@ function Effects.new(ctx)
 		lines[i] = line
 	end
 
+	local handTrails = {}
+	for _, hand in ctx.HandAttachments do
+		table.insert(handTrails, makeHandTrail(hand, cleaner))
+	end
+
 	local self = setmetatable({
 		ctx = ctx,
 		rng = rng,
 		wind = wind,
 		trail = trail,
+		handTrails = handTrails,
 		lines = lines,
 		lineTimer = 0,
 		cleaner = cleaner,
@@ -105,7 +138,43 @@ function Effects.new(ctx)
 		self:_update(dt)
 	end))
 
+	cleaner:Add(motion.events:Connect(function(name: string, value: any)
+		if name == "Land" and value > Config.Landing.DustMinSpeed then
+			self:Dust(value)
+		end
+	end))
+
 	return self
+end
+
+-- A puff of dust at your feet; bigger the harder you land.
+function Effects:Dust(impact: number)
+	local root = self.ctx.Root
+	local hit = workspace:Raycast(root.Position, Vector3.new(0, -8, 0), self.ctx.WorldParams)
+	if not hit then
+		return
+	end
+	local point = Instance.new("Attachment")
+	point.Name = "LandingDust"
+	point.WorldPosition = hit.Position + Vector3.new(0, 0.3, 0)
+	point.Parent = workspace.Terrain
+
+	local dust = Instance.new("ParticleEmitter")
+	dust.Color = ColorSequence.new(Color3.fromRGB(170, 165, 160))
+	dust.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1.2),
+		NumberSequenceKeypoint.new(1, 3.5),
+	})
+	dust.Transparency = NumberSequence.new(0.35, 1)
+	dust.Lifetime = NumberRange.new(0.5, 0.9)
+	dust.Speed = NumberRange.new(10, 18)
+	dust.SpreadAngle = Vector2.new(85, 85)
+	dust.Drag = 4
+	dust.Acceleration = Vector3.new(0, 2, 0)
+	dust.Enabled = false
+	dust.Parent = point
+	dust:Emit(math.floor(MathUtil.remapClamped(impact, 35, 140, 10, 30)))
+	Debris:AddItem(point, 1.5)
 end
 
 function Effects:_play(name: string, pitch: number?)
@@ -163,8 +232,12 @@ function Effects:_update(dt: number)
 		wind.PlaybackSpeed = MathUtil.remapClamped(speed, E.WindMinSpeed, E.WindMaxSpeed, 0.8, 1.4)
 	end
 
-	-- Trail
-	self.trail.Enabled = speed > E.TrailMinSpeed
+	-- Trails
+	local fast = speed > E.TrailMinSpeed
+	self.trail.Enabled = fast
+	for _, handTrail in self.handTrails do
+		handTrail.Enabled = fast
+	end
 
 	-- Speed lines: re-scattered 20 times a second so they flicker like motion blur
 	local intensity = MathUtil.remapClamped(speed, E.SpeedLinesMinSpeed, E.SpeedLinesMaxSpeed, 0, 1)

@@ -22,6 +22,10 @@ The avatar type should be **R15** (Game Settings → Avatar). R6 works but loses
 | Web zip | E | L1 | "Zip" button |
 | Double jump + flip | Space (in the air) | A (in the air) | Jump (in the air) |
 | Dive (hold, in the air) | Q | L2 | "Dive" button |
+| Point launch | Space right as a zip ends | A right as a zip ends | Jump right as a zip ends |
+| Wall run | Fly fast alongside a wall | same | same |
+| Wall jump | Space while wall running | A | Jump |
+| Hide help | H | | |
 | Steer | WASD | Left stick | Thumbstick |
 
 - Hold to swing, let go to fling. You don't need to aim: the web picks the best building in the direction you're pressing (or where the camera faces if you aren't pressing anything).

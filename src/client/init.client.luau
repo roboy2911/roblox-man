@@ -6,10 +6,13 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Cleaner = require(Shared:WaitForChild("Cleaner"))
+local Signal = require(Shared:WaitForChild("Signal"))
 
 local CameraController = require(script.CameraController)
 local CharacterContext = require(script.CharacterContext)
 local Effects = require(script.Effects)
+local GearAnimator = require(script.GearAnimator)
+local HUD = require(script.HUD)
 local InputController = require(script.InputController)
 local LocomotionController = require(script.LocomotionController)
 local MovementState = require(script.MovementState)
@@ -53,13 +56,23 @@ local function startCharacter(character: Model)
 		webHand = "Right",
 		pivot = nil :: Vector3?,
 		lowness = 0,
+		swingStyle = "Tuck",
 		diving = false,
 		flipStart = nil :: number?,
+		flipKind = "Front",
+		rollStart = nil :: number?,
+		wallSide = 1,
+		zipReady = false,
+		-- Fired for things the UI and effects react to:
+		-- SwingStart, Release(perfect), Land(speed), Zip, PointLaunch, AirJump, WallRun,
+		-- WallJump, DiveCatch
+		events = Signal.new(),
 	}
+	s:Add(motion.events)
 
 	local fsm = s:Add(MovementState.new())
 	local visuals = s:Add(WebVisuals.new(ctx))
-	local effects = s:Add(Effects.new(ctx))
+	local effects = s:Add(Effects.new(ctx, motion))
 	visuals.onImpact = function()
 		effects:Stick()
 	end
@@ -67,6 +80,8 @@ local function startCharacter(character: Model)
 	s:Add(SwingController.new(ctx, fsm, input, camera, visuals, effects, motion))
 	s:Add(TrickController.new(ctx, fsm, input, camera, visuals, effects, motion))
 	s:Add(PoseController.new(ctx, fsm, motion))
+	s:Add(GearAnimator.new(ctx, fsm, motion))
+	s:Add(HUD.new(ctx, motion))
 
 	camera:SetCharacter(ctx.Root, ctx.Humanoid)
 	s:Add(function()
