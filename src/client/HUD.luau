@@ -1,7 +1,6 @@
 -- On-screen UI:
 --   * Speed meter (bottom middle)
---   * Chain counter: moves strung together without touching the ground (right side)
---   * Popups for tricks: "PERFECT!", "WALL RUN!", "POINT LAUNCH!", ...
+--   * Popups for tricks: "WALL RUN!", "POINT LAUNCH!", ...
 --   * Crosshair in the middle that lights up red when a web zip target is in reach
 --   * Control hints (bottom left) that match your device; press H to hide/show
 
@@ -46,7 +45,6 @@ local HINTS = {
 }
 
 local POPUPS = {
-	Perfect = "PERFECT!",
 	PointLaunch = "POINT LAUNCH!",
 	WallRun = "WALL RUN!",
 	WallJump = "WALL JUMP!",
@@ -121,19 +119,6 @@ function HUD.new(ctx, motion)
 		corner.Parent = frame
 	end
 
-	-- Chain counter
-	local chainText = label(gui, {
-		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -30, 0.45, 0),
-		Size = UDim2.fromOffset(220, 50),
-		TextXAlignment = Enum.TextXAlignment.Right,
-		TextSize = 34,
-		Text = "",
-		TextColor3 = H.AccentColor,
-	})
-	local chainScale = Instance.new("UIScale")
-	chainScale.Parent = chainText
-
 	-- Crosshair
 	local crosshair = Instance.new("Frame")
 	crosshair.Name = "Crosshair"
@@ -171,13 +156,10 @@ function HUD.new(ctx, motion)
 		gui = gui,
 		speedText = speedText,
 		barFill = barFill,
-		chainText = chainText,
-		chainScale = chainScale,
 		crosshair = crosshair,
 		hints = hints,
 		hintDevice = "",
 		hintsVisible = true,
-		chain = 0,
 		shownSpeed = 0,
 		cleaner = cleaner,
 	}, HUD)
@@ -269,28 +251,8 @@ function HUD:Popup(text: string)
 	end)
 end
 
-function HUD:_bumpChain()
-	self.chain += 1
-	if self.chain >= H.ChainMin then
-		self.chainText.Text = `CHAIN x{self.chain}`
-		self.chainScale.Scale = 1.3
-		TweenService:Create(self.chainScale, TweenInfo.new(0.2, Enum.EasingStyle.Back), { Scale = 1 }):Play()
-	end
-end
-
-function HUD:_onEvent(name: string, value: any)
-	if name == "SwingStart" or name == "Zip" or name == "WallRun" or name == "AirJump" or name == "PointLaunch" then
-		self:_bumpChain()
-	elseif name == "Land" then
-		self.chain = 0
-		self.chainText.Text = ""
-	end
-
-	if name == "Release" then
-		if value then
-			self:Popup(POPUPS.Perfect)
-		end
-	elseif POPUPS[name] then
+function HUD:_onEvent(name: string, _value: any)
+	if POPUPS[name] then
 		self:Popup(POPUPS[name])
 	end
 end

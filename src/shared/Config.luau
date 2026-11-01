@@ -192,7 +192,6 @@ Config.HUD = {
 	TextColor = Color3.fromRGB(255, 255, 255),
 	AccentColor = Color3.fromRGB(220, 30, 45),
 	SpeedMeterMax = 150,
-	ChainMin = 2, -- show the chain counter from this many moves
 	HelpKey = Enum.KeyCode.H,
 }
 
