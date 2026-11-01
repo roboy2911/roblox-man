@@ -328,8 +328,8 @@ Config.Character = {
 -- Robux gamepasses. Create them on the Roblox website (Creator Dashboard > your game >
 -- Monetization > Passes) and paste each pass's ID here. 0 = not for sale yet.
 Config.Gamepasses = {
-	VIP = 0, -- Gold suit + double coins
-	RainbowWebs = 0, -- webs cycle through colors
+	VIP = 2061135318, -- Gold suit + double coins
+	RainbowWebs = 2063474599, -- webs cycle through colors
 }
 
 Config.Progression = {

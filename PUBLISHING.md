@@ -68,7 +68,7 @@ to turn that sound off.
 
 In the Creator Dashboard, under your game:
 
-- **Icon** (512x512) and **thumbnails** (1920x1080): screenshots of swinging between towers work well. In Studio, press **Play**, hide the UI, and take screenshots.
+- **Icon**: upload `assets/icon/game-icon.png`. **Thumbnails** (1920x1080): screenshots of swinging between towers work well. In Studio, press **Play**, hide the UI, and take screenshots.
 - **Description**, for example:
 
   > Swing through a huge city as the Web Creature! Chain swings, wall run, dive and zip between skyscrapers, stop crimes to earn coins and XP, and unlock new suits.
