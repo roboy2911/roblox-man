@@ -58,5 +58,5 @@ src/client/   Movement: MovementState, InputController, LocomotionController, Sw
                         UIKit, Sounds, Settings, Profile
 ```
 
-Poses, animations and sounds are all code-driven, so nothing needs uploading. Sounds are empty
-slots until you add IDs (see PUBLISHING.md).
+Poses and animations are code-driven and sounds use Roblox's official free libraries, so nothing
+needs uploading.

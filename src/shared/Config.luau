@@ -208,23 +208,25 @@ Config.Pose = {
 }
 
 Config.Effects = {
-	-- Sounds are off (empty Id) until real ones are picked. To add one, find a sound in the
-	-- Creator Store (Toolbox -> Audio), copy its ID and put it in as "rbxassetid://123456".
+	-- Sounds come from Roblox's official free libraries (Roblox and the licensed Pro Sound
+	-- Effects library), so they work in any game with no uploads. Set Id = "" to turn one off,
+	-- or swap in any sound ID from the Toolbox (View > Toolbox > Audio).
 	Sounds = {
-		Shoot = { Id = "", Volume = 0.35, Speed = 1 }, -- web fires
-		Stick = { Id = "", Volume = 0.3, Speed = 1 }, -- web hits a building
-		Release = { Id = "", Volume = 0.3, Speed = 1 }, -- letting go of a swing
-		Whoosh = { Id = "", Volume = 0.22, Speed = 1 }, -- passing the bottom of a fast swing
-		Zip = { Id = "", Volume = 0.45, Speed = 1 }, -- web zip
-		AirJump = { Id = "", Volume = 0.5, Speed = 1 }, -- double jump
-		Wind = { Id = "", Volume = 0.6, Speed = 1 }, -- looping wind, louder with speed
-		Punch = { Id = "", Volume = 0.4, Speed = 1 }, -- throwing a punch
-		Hit = { Id = "", Volume = 0.5, Speed = 1 }, -- a punch landing
-		LevelUp = { Id = "", Volume = 0.5, Speed = 1 },
-		Coins = { Id = "", Volume = 0.4, Speed = 1 }, -- rewards
-		CrimeAlert = { Id = "", Volume = 0.4, Speed = 1 }, -- a new crime nearby
-		Click = { Id = "", Volume = 0.3, Speed = 1 }, -- menu buttons
+		Shoot = { Id = "rbxassetid://9113617425", Volume = 0.35, Speed = 1.15 }, -- web fires
+		Stick = { Id = "rbxassetid://9113532901", Volume = 0.3, Speed = 1.2 }, -- web hits a building
+		Release = { Id = "rbxassetid://9120709477", Volume = 0.3, Speed = 1.1 }, -- letting go of a swing
+		Whoosh = { Id = "rbxassetid://9113080102", Volume = 0.25, Speed = 1 }, -- bottom of a fast swing
+		Zip = { Id = "rbxassetid://9113612888", Volume = 0.4, Speed = 1 }, -- web zip
+		AirJump = { Id = "rbxassetid://9113819689", Volume = 0.45, Speed = 1 }, -- double jump
+		Wind = { Id = "rbxassetid://9113286969", Volume = 0.7, Speed = 1 }, -- looping wind, louder with speed
+		Punch = { Id = "rbxassetid://9113611190", Volume = 0.35, Speed = 0.9 }, -- throwing a punch
+		Hit = { Id = "rbxassetid://9117969717", Volume = 0.5, Speed = 1 }, -- a punch landing
+		LevelUp = { Id = "rbxassetid://17208327798", Volume = 0.5, Speed = 1 },
+		Coins = { Id = "rbxassetid://17208380755", Volume = 0.45, Speed = 1 }, -- rewards
+		CrimeAlert = { Id = "rbxassetid://17208372272", Volume = 0.4, Speed = 1 }, -- a new crime nearby
+		Click = { Id = "rbxassetid://15675032796", Volume = 0.35, Speed = 1 }, -- menu buttons
 	},
+
 	WindMinSpeed = 40,
 	WindMaxSpeed = 140,
 	SpeedLinesMinSpeed = 70,

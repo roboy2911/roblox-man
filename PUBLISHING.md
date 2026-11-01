@@ -16,7 +16,7 @@ rojo build -o WebCreature.rbxl
 
 Open `WebCreature.rbxl` in Roblox Studio. (Or keep using `rojo serve` + the Rojo plugin on an open place; both work.)
 
-Delete the default `Baseplate` part if your place has one. The game builds its own city.
+The game builds its own city and removes Studio's default Baseplate and SpawnLocation by itself.
 
 ## 2. Publish the place
 
@@ -47,17 +47,13 @@ Config.Gamepasses = {
 
 While an ID is `0`, that pass shows as "Coming soon" in the shop.
 
-## 5. Sounds (optional)
+## 5. Sounds (already done)
 
-Every sound slot is empty, so the game is silent until you fill them. In Studio open **View > Toolbox > Audio**, find sounds you like, right-click > **Copy Asset ID**, and paste them into `Config.Effects.Sounds` in `src/shared/Config.luau`:
-
-```lua
-Shoot = { Id = "rbxassetid://1234567890", Volume = 0.35, Speed = 1 },
-```
-
-Slots: `Shoot`, `Stick`, `Release`, `Whoosh`, `Zip`, `AirJump`, `Wind` (looping), `Punch`, `Hit`, `LevelUp`, `Coins`, `CrimeAlert`, `Click`.
-
-Only use sounds that are free to use (Roblox's own or ones marked public in the Creator Store).
+All sounds are already set up using Roblox's official free sound libraries (sounds published by
+Roblox and the licensed Pro Sound Effects library), so they work in your game with nothing to
+upload. To change one, find a sound in **View > Toolbox > Audio**, right-click > **Copy Asset ID**,
+and replace its `Id` in `Config.Effects.Sounds` (`src/shared/Config.luau`). Set an `Id` to `""`
+to turn that sound off.
 
 ## 6. Test before going public (required)
 

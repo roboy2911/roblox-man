@@ -51,6 +51,39 @@ local function detail(
 	return part
 end
 
+-- Roblox parts can be at most 2048 studs on each side (bigger sizes get silently cut down),
+-- so big flat things like the ground are built from several tiles.
+local MAX_TILE = 2000
+
+local function tiled(
+	parent: Instance,
+	name: string,
+	size: Vector3,
+	center: Vector3,
+	color: Color3,
+	material: Enum.Material,
+	collide: boolean
+): { Part }
+	local countX = math.ceil(size.X / MAX_TILE)
+	local countZ = math.ceil(size.Z / MAX_TILE)
+	local tileX = size.X / countX
+	local tileZ = size.Z / countZ
+	local parts = {}
+	for ix = 0, countX - 1 do
+		for iz = 0, countZ - 1 do
+			local x = center.X - size.X / 2 + tileX * (ix + 0.5)
+			local z = center.Z - size.Z / 2 + tileZ * (iz + 0.5)
+			local part = block(parent, name, Vector3.new(tileX, size.Y, tileZ), CFrame.new(x, center.Y, z), color, material)
+			if not collide then
+				part.CanCollide = false
+				part.CastShadow = false
+			end
+			table.insert(parts, part)
+		end
+	end
+	return parts
+end
+
 local function cylinder(parent: Instance, name: string, height: number, diameter: number, cframe: CFrame, color: Color3, material: Enum.Material): Part
 	-- Cylinders run along X, so turn them upright.
 	local part = block(parent, name, Vector3.new(height, diameter, diameter), cframe * CFrame.Angles(0, 0, math.rad(90)), color, material)
@@ -290,13 +323,26 @@ function CityBuilder.Build(): Folder
 	local span = C.GridSize * pitch + C.RoadWidth
 	local half = span / 2
 
-	block(streets, "Ground", Vector3.new(span + C.Margin * 2, 4, span + C.Margin * 2), CFrame.new(0, -2, 0), C.RoadColor, Enum.Material.Asphalt)
+	local outer = span + C.Margin * 2
+	tiled(streets, "Ground", Vector3.new(outer, 4, outer), Vector3.new(0, -2, 0), C.RoadColor, Enum.Material.Asphalt, true)
+
+	-- Invisible walls around the edge of the map, so nobody swings off the world.
+	local wallHeight = 800
+	for _, side in { Vector3.xAxis, -Vector3.xAxis, Vector3.zAxis, -Vector3.zAxis } do
+		local alongX = side.Z ~= 0
+		local size = if alongX then Vector3.new(outer, wallHeight, 4) else Vector3.new(4, wallHeight, outer)
+		for _, wall in tiled(streets, "EdgeWall", size, side * (outer / 2) + Vector3.new(0, wallHeight / 2, 0), Color3.new(), Enum.Material.SmoothPlastic, true) do
+			wall.Transparency = 1
+			wall.CanQuery = false
+			wall.CastShadow = false
+		end
+	end
 
 	-- Yellow center line down every road
 	for i = 0, C.GridSize do
 		local roadCenter = -half + i * pitch + C.RoadWidth / 2
-		detail(streets, "LaneLine", Vector3.new(span, 0.1, 0.6), CFrame.new(0, 0.05, roadCenter), C.LaneColor, Enum.Material.SmoothPlastic)
-		detail(streets, "LaneLine", Vector3.new(0.6, 0.1, span), CFrame.new(roadCenter, 0.05, 0), C.LaneColor, Enum.Material.SmoothPlastic)
+		tiled(streets, "LaneLine", Vector3.new(span, 0.1, 0.6), Vector3.new(0, 0.05, roadCenter), C.LaneColor, Enum.Material.SmoothPlastic, false)
+		tiled(streets, "LaneLine", Vector3.new(0.6, 0.1, span), Vector3.new(roadCenter, 0.05, 0), C.LaneColor, Enum.Material.SmoothPlastic, false)
 	end
 
 	local plaza = math.floor(C.GridSize / 2)
@@ -356,10 +402,15 @@ function CityBuilder.Build(): Folder
 		end
 	end
 
-	-- Studio's template spawn would compete with the plaza spawn.
+	-- Studio's template spawn would compete with the plaza spawn, and the template baseplate
+	-- sits exactly level with our ground (flickering where they overlap).
 	local templateSpawn = workspace:FindFirstChild("SpawnLocation")
 	if templateSpawn and templateSpawn:IsA("SpawnLocation") then
 		templateSpawn:Destroy()
+	end
+	local templateBaseplate = workspace:FindFirstChild("Baseplate")
+	if templateBaseplate and templateBaseplate:IsA("BasePart") then
+		templateBaseplate:Destroy()
 	end
 
 	setupLighting()

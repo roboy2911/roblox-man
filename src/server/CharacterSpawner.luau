@@ -123,6 +123,7 @@ end
 
 function CharacterSpawner.Start()
 	Players.CharacterAutoLoads = false
+	Players.RespawnTime = 3
 	Players.PlayerAdded:Connect(onPlayerAdded)
 	for _, player in Players:GetPlayers() do
 		task.spawn(onPlayerAdded, player)
