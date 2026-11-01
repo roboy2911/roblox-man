@@ -13,6 +13,8 @@
 --     pose when falling fast.
 --   * Landing roll after a fast landing.
 --   * The head looks where you're going whenever a pose is active.
+--   * Punches (layered on top of whatever else is happening).
+-- Also used to show other players' poses (see RemoteViews).
 -- R15 only; on R6 this does nothing.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -99,7 +101,7 @@ end
 local PoseController = {}
 PoseController.__index = PoseController
 
-function PoseController.new(ctx, fsm, motion)
+function PoseController.new(ctx, fsm, motion, quiet: boolean?)
 	local self = setmetatable({
 		ctx = ctx,
 		fsm = fsm,
@@ -110,10 +112,14 @@ function PoseController.new(ctx, fsm, motion)
 		posing = false, -- whether joints are currently changed from their defaults
 		nextJointCheck = 0,
 		time = 0,
+		quiet = quiet == true,
 		cleaner = Cleaner.new(),
 	}, PoseController)
 
 	if not ctx.IsR15 then
+		if quiet then
+			return self
+		end
 		warn(
 			"[Web Creature] Your character is R6, so swing poses are turned off. "
 				.. "In Studio go to Home > Game Settings > Avatar and set Avatar Type to R15."
@@ -124,7 +130,7 @@ function PoseController.new(ctx, fsm, motion)
 	for jointName in JOINTS do
 		self.current[jointName] = CFrame.identity
 	end
-	self:_findJoints(true)
+	self:_findJoints(not self.quiet)
 	self.animator = ctx.Humanoid:FindFirstChildOfClass("Animator")
 
 	self.cleaner:Add(RunService.PreSimulation:Connect(function(dt)
@@ -420,12 +426,35 @@ function PoseController:_restore()
 	self.posing = false
 end
 
+-- Throws the punching arm out and back, with the other arm up in a guard.
+function PoseController:_punchOverlay(t: { [string]: CFrame }): boolean
+	local p = progress(self.motion.punchStart, P.PunchTime)
+	if not p then
+		return false
+	end
+	local hand = self.motion.punchHand or "Right"
+	local other = if hand == "Right" then "Left" else "Right"
+	local extend = math.sin(p * math.pi) -- 0 -> 1 -> 0
+	t[hand .. "Shoulder"] = CFrame.Angles(rad(lerp(40, 95, extend)), 0, 0)
+	t[hand .. "Elbow"] = CFrame.Angles(rad(lerp(100, 0, extend)), 0, 0)
+	t[other .. "Shoulder"] = CFrame.Angles(rad(60), 0, 0)
+	t[other .. "Elbow"] = CFrame.Angles(rad(110), 0, 0)
+	t.Waist = CFrame.Angles(0, (if hand == "Right" then 1 else -1) * rad(25) * extend, 0)
+	return true
+end
+
 function PoseController:_update(dt: number)
 	self.time += dt
 	self:_checkJoints()
 	local targets, targetWeight = self:_targets()
-	local alpha = MathUtil.expAlpha(P.Blend, dt)
-	self.weight += (targetWeight - self.weight) * MathUtil.expAlpha(P.WeightBlend, dt)
+	local punching = self:_punchOverlay(targets)
+	local alpha = MathUtil.expAlpha(if punching then 30 else P.Blend, dt)
+	if punching then
+		-- Punches are quick, so show them at full strength right away.
+		self.weight = 1
+	else
+		self.weight += (targetWeight - self.weight) * MathUtil.expAlpha(P.WeightBlend, dt)
+	end
 
 	local spin = self:_spinRotation()
 

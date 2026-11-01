@@ -1,4 +1,6 @@
--- Client entry point: sets up input and camera once, and all movement systems per character.
+-- Client entry point.
+-- Once per session: input, camera, profile, menus, notifications, other players' views,
+-- thug animation and crime markers. Per character (each spawn): all the movement systems.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -6,17 +8,26 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Cleaner = require(Shared:WaitForChild("Cleaner"))
+local Remotes = require(Shared:WaitForChild("Remotes"))
 local Signal = require(Shared:WaitForChild("Signal"))
 
 local CameraController = require(script.CameraController)
 local CharacterContext = require(script.CharacterContext)
+local CombatController = require(script.CombatController)
+local CrimeMarkers = require(script.CrimeMarkers)
 local Effects = require(script.Effects)
 local GearAnimator = require(script.GearAnimator)
 local HUD = require(script.HUD)
 local InputController = require(script.InputController)
 local LocomotionController = require(script.LocomotionController)
+local Menu = require(script.Menu)
+local MotionSync = require(script.MotionSync)
 local MovementState = require(script.MovementState)
+local NPCAnimator = require(script.NPCAnimator)
+local Notifications = require(script.Notifications)
 local PoseController = require(script.PoseController)
+local Profile = require(script.Profile)
+local RemoteViews = require(script.RemoteViews)
 local SwingController = require(script.SwingController)
 local TrickController = require(script.TrickController)
 local WebVisuals = require(script.WebVisuals)
@@ -24,6 +35,16 @@ local WebVisuals = require(script.WebVisuals)
 local player = Players.LocalPlayer
 local input = InputController.new()
 local camera = CameraController.new()
+
+Profile.Start()
+Notifications.Start()
+Menu.Init(input)
+RemoteViews.Start()
+task.spawn(NPCAnimator.Start)
+task.spawn(CrimeMarkers.Start)
+
+-- Tricks that earn a little XP
+local XP_TRICKS = { WallRun = true, WallJump = true, PointLaunch = true, DiveCatch = true }
 
 local session = nil
 local spawnCount = 0
@@ -63,6 +84,8 @@ local function startCharacter(character: Model)
 		rollStart = nil :: number?,
 		wallSide = 1,
 		zipReady = false,
+		punchStart = nil :: number?,
+		punchHand = "Right",
 		-- Fired for things the UI and effects react to:
 		-- SwingStart, Release(perfect), Land(speed), Zip, PointLaunch, AirJump, WallRun,
 		-- WallJump, DiveCatch
@@ -79,9 +102,18 @@ local function startCharacter(character: Model)
 	s:Add(LocomotionController.new(ctx, fsm, motion))
 	s:Add(SwingController.new(ctx, fsm, input, camera, visuals, effects, motion))
 	s:Add(TrickController.new(ctx, fsm, input, camera, visuals, effects, motion))
+	s:Add(CombatController.new(ctx, input, camera, effects, motion))
 	s:Add(PoseController.new(ctx, fsm, motion))
 	s:Add(GearAnimator.new(ctx, fsm, motion))
 	s:Add(HUD.new(ctx, motion))
+	s:Add(MotionSync.new(fsm, motion, visuals))
+
+	local trickRemote = Remotes.Event("Trick")
+	s:Add(motion.events:Connect(function(name: string, value: any)
+		if XP_TRICKS[name] or (name == "Release" and value == true) then
+			trickRemote:FireServer(name)
+		end
+	end))
 
 	camera:SetCharacter(ctx.Root, ctx.Humanoid)
 	s:Add(function()

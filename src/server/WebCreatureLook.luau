@@ -5,11 +5,14 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+-- The palette being built with. Decorate sets it from the player's suit right before building
+-- (building never yields, so two players can't mix up their colors).
 local C = Config.Character
 
 local WebCreatureLook = {}
 
-function WebCreatureLook.CreateDescription(): HumanoidDescription
+function WebCreatureLook.CreateDescription(colors: any?): HumanoidDescription
+	local C = colors or Config.Character
 	local desc = Instance.new("HumanoidDescription")
 	desc.HeadColor = C.Suit
 	desc.TorsoColor = C.SuitLight
@@ -314,15 +317,15 @@ local RED_PARTS = { LeftHand = true, RightHand = true, LeftFoot = true, RightFoo
 
 -- Paints hands and feet red, and keeps them red: Roblox's avatar loading (body colors) can
 -- repaint them afterwards, and can even swap in new body parts.
-local function keepLimbsRed(character: Model)
+local function keepLimbsRed(character: Model, accent: Color3)
 	local function paint(part: Instance)
 		if not (RED_PARTS[part.Name] and part:IsA("BasePart")) then
 			return
 		end
-		part.Color = C.Accent
+		part.Color = accent
 		part:GetPropertyChangedSignal("Color"):Connect(function()
-			if part.Color ~= C.Accent then
-				part.Color = C.Accent
+			if part.Color ~= accent then
+				part.Color = accent
 			end
 		end)
 	end
@@ -348,7 +351,7 @@ local function waitForAppearance(player: Player, timeout: number)
 	connection:Disconnect()
 end
 
-function WebCreatureLook.Decorate(player: Player, character: Model)
+function WebCreatureLook.Decorate(player: Player, character: Model, colors: any?)
 	local humanoid = character:WaitForChild("Humanoid", 10) :: Humanoid?
 	local head = character:WaitForChild("Head", 10) :: BasePart?
 	if not humanoid or not head then
@@ -366,11 +369,14 @@ function WebCreatureLook.Decorate(player: Player, character: Model)
 		return
 	end
 
+	C = colors or Config.Character
+	character:SetAttribute("AccentColor", C.Accent)
+
 	removeFace(head)
 
 	-- Red gloves and boots (R15 only; R6 has no separate hands/feet)
 	if isR15 then
-		keepLimbsRed(character)
+		keepLimbsRed(character, C.Accent)
 	end
 
 	local old = character:FindFirstChild("WebCreatureGear")

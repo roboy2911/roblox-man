@@ -5,9 +5,11 @@
 --   * When the web wraps around building corners it's drawn as a chain of segments:
 --       stick point -> corner 1 -> corner 2 -> ... -> hand
 --   * When you let go, the last strand falls away and fades instead of vanishing.
+--   * With the Rainbow Webs gamepass, webs cycle through colors (for everyone watching).
 -- Local only for now; showing other players' webs comes in the multiplayer step.
 
 local Debris = game:GetService("Debris")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -77,6 +79,8 @@ function WebVisuals.new(ctx)
 		slack = 0,
 		active = false,
 		remnants = {} :: { any },
+		owner = Players:GetPlayerFromCharacter(ctx.Character),
+		rainbow = false,
 		cleaner = Cleaner.new(),
 	}, WebVisuals)
 
@@ -304,6 +308,24 @@ function WebVisuals:_update(dt: number)
 	end
 	self:_place()
 	self:_bendLastSegment()
+	self:_updateColor()
+end
+
+-- Rainbow Webs gamepass: cycle the web's color.
+function WebVisuals:_updateColor()
+	local rainbow = self.owner ~= nil and self.owner:GetAttribute("RainbowWebs") == true
+	if not rainbow and not self.rainbow then
+		return
+	end
+	self.rainbow = rainbow
+	local core = if rainbow then Color3.fromHSV((os.clock() * 0.4) % 1, 0.65, 1) else W.Color
+	local glow = if rainbow then Color3.fromHSV((os.clock() * 0.4) % 1, 0.8, 1) else W.GlowColor
+	local coreSequence = ColorSequence.new(core)
+	local glowSequence = ColorSequence.new(glow)
+	for i = 1, #self.points do
+		self.cores[i].Color = coreSequence
+		self.glows[i].Color = glowSequence
+	end
 end
 
 function WebVisuals:Destroy()

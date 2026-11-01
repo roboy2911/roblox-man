@@ -12,6 +12,9 @@ local C = Config.City
 
 local CityBuilder = {}
 
+-- Sidewalk spots (one in the middle of each block edge) where crimes can happen.
+CityBuilder.Spots = {} :: { Vector3 }
+
 local function block(
 	parent: Instance,
 	name: string,
@@ -321,6 +324,13 @@ function CityBuilder.Build(): Folder
 			-- One streetlight on a corner of each block, leaning over the road
 			local corner = C.BlockSize / 2 - 2
 			buildStreetlight(streets, cx + corner, cz + corner, Vector3.xAxis)
+
+			if not (gx == plaza and gz == plaza) then
+				local edge = C.BlockSize / 2 - 3
+				for _, offset in { Vector3.new(edge, 0, 0), Vector3.new(-edge, 0, 0), Vector3.new(0, 0, edge), Vector3.new(0, 0, -edge) } do
+					table.insert(CityBuilder.Spots, Vector3.new(cx, C.CurbHeight, cz) + offset)
+				end
+			end
 
 			if gx == plaza and gz == plaza then
 				-- Open plaza surrounded by the tallest towers: a good place to start swinging.

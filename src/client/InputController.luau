@@ -13,11 +13,19 @@ InputController.__index = InputController
 function InputController.new()
 	local self = setmetatable({
 		_down = {} :: { [string]: boolean },
+		Enabled = true, -- turned off while menus are open
 		ActionBegan = Signal.new(),
 		ActionEnded = Signal.new(),
 	}, InputController)
 
 	local function handle(action: string, state: Enum.UserInputState, _input: InputObject)
+		if not self.Enabled then
+			if self._down[action] then
+				self._down[action] = false
+				self.ActionEnded:Fire(action)
+			end
+			return Enum.ContextActionResult.Pass
+		end
 		if state == Enum.UserInputState.Begin then
 			self._down[action] = true
 			self.ActionBegan:Fire(action)
@@ -39,7 +47,19 @@ function InputController.new()
 end
 
 function InputController:IsDown(action: string): boolean
-	return self._down[action] == true
+	return self.Enabled and self._down[action] == true
+end
+
+function InputController:SetEnabled(enabled: boolean)
+	self.Enabled = enabled
+	if not enabled then
+		for action, down in self._down do
+			if down then
+				self._down[action] = false
+				self.ActionEnded:Fire(action)
+			end
+		end
+	end
 end
 
 return InputController

@@ -138,6 +138,10 @@ Config.Input = {
 		Inputs = { Enum.KeyCode.Q, Enum.KeyCode.ButtonL2 } :: { any },
 		Title = "Dive",
 	},
+	Punch = {
+		Inputs = { Enum.KeyCode.F, Enum.KeyCode.ButtonX } :: { any },
+		Title = "Punch",
+	},
 }
 
 Config.Tricks = {
@@ -200,6 +204,7 @@ Config.Pose = {
 	WeightBlend = 10, -- how quickly poses fade in and out
 	FallPoseMinSpeed = 35, -- spread-out falling pose starts above this speed
 	FallPoseMaxSpeed = 100,
+	PunchTime = 0.25,
 }
 
 Config.Effects = {
@@ -213,6 +218,12 @@ Config.Effects = {
 		Zip = { Id = "", Volume = 0.45, Speed = 1 }, -- web zip
 		AirJump = { Id = "", Volume = 0.5, Speed = 1 }, -- double jump
 		Wind = { Id = "", Volume = 0.6, Speed = 1 }, -- looping wind, louder with speed
+		Punch = { Id = "", Volume = 0.4, Speed = 1 }, -- throwing a punch
+		Hit = { Id = "", Volume = 0.5, Speed = 1 }, -- a punch landing
+		LevelUp = { Id = "", Volume = 0.5, Speed = 1 },
+		Coins = { Id = "", Volume = 0.4, Speed = 1 }, -- rewards
+		CrimeAlert = { Id = "", Volume = 0.4, Speed = 1 }, -- a new crime nearby
+		Click = { Id = "", Volume = 0.3, Speed = 1 }, -- menu buttons
 	},
 	WindMinSpeed = 40,
 	WindMaxSpeed = 140,
@@ -309,6 +320,71 @@ Config.Character = {
 	Accent = Color3.fromRGB(220, 30, 45),
 	Eye = Color3.fromRGB(255, 255, 255),
 	Metal = Color3.fromRGB(60, 62, 72),
+}
+
+
+-- Robux gamepasses. Create them on the Roblox website (Creator Dashboard > your game >
+-- Monetization > Passes) and paste each pass's ID here. 0 = not for sale yet.
+Config.Gamepasses = {
+	VIP = 0, -- Gold suit + double coins
+	RainbowWebs = 0, -- webs cycle through colors
+}
+
+Config.Progression = {
+	CrimeCoins = 40, -- per player who helped stop a crime
+	CrimeXp = 60,
+	ThugKoXp = 10, -- for knocking out a thug
+	TrickXp = 3, -- wall runs, point launches, perfect releases, ...
+	TrickXpPerMinute = 60, -- cap, so tricks can't be farmed endlessly
+	LevelUpCoins = 50,
+	VipCoinMultiplier = 2,
+	AutosaveInterval = 120, -- seconds
+}
+
+Config.Crime = {
+	SpawnInterval = 15, -- seconds between checks for a new crime
+	MaxActive = 3, -- crimes at once (plus one per extra player)
+	MinDistance = 120, -- new crimes appear this far from a player...
+	MaxDistance = 600, -- ...but no further than this
+	ThugsMin = 2,
+	ThugsMax = 4,
+	ThugHealth = 100,
+	ThugSpeed = 15,
+	ThugDamage = 8,
+	ThugAttackRange = 5,
+	ThugAttackCooldown = 1.3,
+	ThugAggroRange = 45,
+	Lifetime = 240, -- an ignored crime disappears after this long
+	CleanupDelay = 4,
+}
+
+Config.Combat = {
+	PunchRange = 7,
+	PunchCooldown = 0.35,
+	PunchDamage = 34, -- 3 punches knock out a thug
+	SpeedKoThreshold = 55, -- punching while moving this fast knocks out in one hit
+	SpeedDamage = 100,
+	Knockback = 45,
+	LungeRange = 14, -- punch pulls you toward a thug this close in front of you
+	LungeSpeed = 30,
+}
+
+-- Player settings (saved). Defaults:
+Config.Settings = {
+	AutoFollowCamera = true,
+	CameraTilt = true,
+	CameraShake = true,
+	FovEffects = true,
+	SpeedLines = true,
+	ControlHints = true,
+}
+Config.SettingsOrder = {
+	{ Key = "AutoFollowCamera", Label = "Camera follows your swing" },
+	{ Key = "CameraTilt", Label = "Camera tilts in turns" },
+	{ Key = "CameraShake", Label = "Camera shake" },
+	{ Key = "FovEffects", Label = "Speed zoom (FOV)" },
+	{ Key = "SpeedLines", Label = "Speed lines" },
+	{ Key = "ControlHints", Label = "Show control hints" },
 }
 
 return Config

@@ -4,7 +4,8 @@
 --   * speed lines around the edge of the screen
 --   * a glowing trail behind you, and thin streaks from your hands, when you're really moving
 --   * a dust puff when you land hard
--- All local to this player for now.
+--   * punch sounds, and a burst where any punch lands (yours, other players' or thugs')
+-- The trail uses your suit's accent color. Speed lines can be turned off in Settings.
 
 local Debris = game:GetService("Debris")
 local Players = game:GetService("Players")
@@ -14,6 +15,8 @@ local RunService = game:GetService("RunService")
 local Cleaner = require(ReplicatedStorage.Shared.Cleaner)
 local Config = require(ReplicatedStorage.Shared.Config)
 local MathUtil = require(ReplicatedStorage.Shared.MathUtil)
+local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local Settings = require(script.Parent.Settings)
 
 local E = Config.Effects
 
@@ -89,7 +92,11 @@ function Effects.new(ctx, motion)
 	trail.MinLength = 0.1
 	trail.FaceCamera = true
 	trail.LightEmission = 0.8
-	trail.Color = ColorSequence.new(Config.Character.Accent, Color3.new(1, 1, 1))
+	local accent = ctx.Character:GetAttribute("AccentColor")
+	if typeof(accent) ~= "Color3" then
+		accent = Config.Character.Accent
+	end
+	trail.Color = ColorSequence.new(accent, Color3.new(1, 1, 1))
 	trail.Transparency = NumberSequence.new(0.35, 1)
 	trail.WidthScale = NumberSequence.new(1, 0)
 	trail.Enabled = false
@@ -136,6 +143,20 @@ function Effects.new(ctx, motion)
 
 	cleaner:Add(RunService.RenderStepped:Connect(function(dt)
 		self:_update(dt)
+	end))
+
+	-- The suit's accent color arrives from the server a moment after spawning.
+	cleaner:Add(ctx.Character:GetAttributeChangedSignal("AccentColor"):Connect(function()
+		local color = ctx.Character:GetAttribute("AccentColor")
+		if typeof(color) == "Color3" then
+			trail.Color = ColorSequence.new(color, Color3.new(1, 1, 1))
+		end
+	end))
+
+	cleaner:Add(Remotes.Event("HitFx").OnClientEvent:Connect(function(position: any)
+		if typeof(position) == "Vector3" then
+			self:HitBurst(position)
+		end
 	end))
 
 	cleaner:Add(motion.events:Connect(function(name: string, value: any)
@@ -211,6 +232,45 @@ function Effects:AirJump()
 	self:_play("AirJump")
 end
 
+function Effects:Punch()
+	self:_play("Punch")
+end
+
+-- A punch landed somewhere: a quick white burst and a hit sound.
+function Effects:HitBurst(position: Vector3)
+	if (position - self.ctx.Root.Position).Magnitude > 250 then
+		return
+	end
+	local point = Instance.new("Attachment")
+	point.Name = "HitBurst"
+	point.WorldPosition = position
+	point.Parent = workspace.Terrain
+
+	local burst = Instance.new("ParticleEmitter")
+	burst.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(255, 220, 150))
+	burst.LightEmission = 0.8
+	burst.Size = NumberSequence.new(0.8, 0)
+	burst.Transparency = NumberSequence.new(0, 1)
+	burst.Lifetime = NumberRange.new(0.15, 0.3)
+	burst.Speed = NumberRange.new(15, 30)
+	burst.SpreadAngle = Vector2.new(180, 180)
+	burst.Drag = 6
+	burst.Enabled = false
+	burst.Parent = point
+	burst:Emit(16)
+
+	local def = E.Sounds.Hit
+	if def.Id ~= "" then
+		local sound = Instance.new("Sound")
+		sound.SoundId = def.Id
+		sound.Volume = def.Volume
+		sound.PlaybackSpeed = def.Speed * self.rng:NextNumber(0.9, 1.1)
+		sound.Parent = point
+		sound:Play()
+	end
+	Debris:AddItem(point, 2)
+end
+
 function Effects:_rerollLine(line: Frame, intensity: number)
 	local rng = self.rng
 	local angle = rng:NextNumber(0, math.pi * 2)
@@ -240,7 +300,9 @@ function Effects:_update(dt: number)
 	end
 
 	-- Speed lines: re-scattered 20 times a second so they flicker like motion blur
-	local intensity = MathUtil.remapClamped(speed, E.SpeedLinesMinSpeed, E.SpeedLinesMaxSpeed, 0, 1)
+	local intensity = if Settings.Get("SpeedLines")
+		then MathUtil.remapClamped(speed, E.SpeedLinesMinSpeed, E.SpeedLinesMaxSpeed, 0, 1)
+		else 0
 	self.lineTimer += dt
 	local reroll = self.lineTimer > 0.05
 	if reroll then

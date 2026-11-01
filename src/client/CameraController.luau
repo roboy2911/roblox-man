@@ -11,6 +11,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local MathUtil = require(ReplicatedStorage.Shared.MathUtil)
+local Settings = require(script.Parent.Settings)
 
 local C = Config.Camera
 local flat = MathUtil.flat
@@ -91,6 +92,10 @@ function CameraController:_update(dt: number)
 
 	local speed = if self.root then self.root.AssemblyLinearVelocity.Magnitude else 0
 	local target = MathUtil.remapClamped(speed, C.FovMinSpeed, C.FovMaxSpeed, C.BaseFov, C.MaxFov)
+	if not Settings.Get("FovEffects") then
+		target = C.BaseFov
+		self.kick = 0
+	end
 
 	self.fov += (target - self.fov) * MathUtil.expAlpha(C.Smoothing, dt)
 	self.kick *= math.exp(-C.KickDecay * dt)
@@ -99,7 +104,7 @@ function CameraController:_update(dt: number)
 	self.shake *= math.exp(-C.ShakeDecay * dt)
 	local humanoid = self.humanoid
 	if humanoid then
-		if self.shake > 0.01 then
+		if self.shake > 0.01 and Settings.Get("CameraShake") then
 			local t = self.time * C.ShakeFrequency
 			local strength = self.shake * self.shake * C.ShakeStrength
 			humanoid.CameraOffset = Vector3.new(math.noise(t, 0.3), math.noise(t, 7.1), math.noise(t, 13.7)) * strength
@@ -126,7 +131,7 @@ function CameraController:_afterCamera(dt: number)
 	-- Auto-follow: turn toward the direction of travel. The default camera continues from
 	-- whatever direction we leave it facing, so this sticks.
 	local idle = os.clock() - self.lastManualInput > C.AutoFollowDelay
-	if idle and airborne and not shiftLock and speed > C.AutoFollowMinSpeed then
+	if Settings.Get("AutoFollowCamera") and idle and airborne and not shiftLock and speed > C.AutoFollowMinSpeed then
 		local look = flat(camera.CFrame.LookVector)
 		if look.Magnitude > 1e-3 then
 			look = look.Unit
@@ -140,7 +145,7 @@ function CameraController:_afterCamera(dt: number)
 	end
 
 	-- Tilt into turns: sideways speed relative to the camera.
-	local sideways = if airborne then velocity:Dot(camera.CFrame.RightVector) else 0
+	local sideways = if airborne and Settings.Get("CameraTilt") then velocity:Dot(camera.CFrame.RightVector) else 0
 	local targetRoll = -math.clamp(sideways / Config.Swing.MaxSpeed, -1, 1) * math.rad(C.RollMax)
 	self.roll += (targetRoll - self.roll) * MathUtil.expAlpha(C.RollSmoothing, dt)
 	if math.abs(self.roll) > 1e-4 then
